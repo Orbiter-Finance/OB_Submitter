@@ -1,8 +1,28 @@
-[package]
-name = "submitter"
-version = "0.1.0"
+[workspace]
+members = [
+    "./bin/*",
+    "crates/*",
+]
+
+default-members = [
+    "bin/submitter",
+]
+
+[workspace.package ]
+author = "YanOctavian"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/YanOctavian/submitter"
+rust-version = "1.70"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace.dependencies]
+ethers = { version = "2.0.8" }
+tracing = "0.1"
+tokio = { version = "1.18", features = ["full"] }
 
-[dependencies]
+[profile.debug-fast]
+inherits = "release"
+debug = true
+
+
+

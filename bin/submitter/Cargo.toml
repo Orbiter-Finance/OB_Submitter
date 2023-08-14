@@ -1,0 +1,17 @@
+[package]
+name = "submitter"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "submitter-client"
+path = "src/main.rs"
+[dependencies]
+anyhow = "1.0.72"
+dotenv = "0.15.0"
+submitter-client = { path = "../../crates/client", package = "client" }
+tokio.workspace = true
+
+
