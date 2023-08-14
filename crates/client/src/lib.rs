@@ -1,6 +1,6 @@
 mod command;
 mod cli;
-mod scheduler;
+mod schedulers;
 
 pub use cli::run;
 pub use command::Args;

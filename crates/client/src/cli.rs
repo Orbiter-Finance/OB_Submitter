@@ -13,6 +13,7 @@ use dialoguer::Password;
 
 pub struct Client<State: StataTrait<H256, Data>, Provider, Wallet> {
     pub wallet: Arc<Wallet>,
+    // fixme should not be designed like this.
     pub provider: Arc<Provider>,
     pub rpc_server_port: u16,
     pub state: Arc<Mutex<State>>
@@ -39,9 +40,9 @@ impl<'a> Client<State<'a, Blake2bHasher>,Provider<Http>, LocalWallet> {
 pub async fn run() -> Result<()> {
     dotenv().ok();
     let args = Args::parse();
-    let state_prefix = args.state_prefix;
-    let rpc_server_port = args.rpc_server_port;
-    println!("state_prefix: {}", state_prefix);
+    let state_path = args.state_path;
+    let rpc_server_port = args.rpc_port;
+    println!("state_path: {}", state_path);
     println!("rpc_server_port: {}", rpc_server_port);
 
     // contains 0x prefix
@@ -52,7 +53,7 @@ pub async fn run() -> Result<()> {
 
     let wallet = Arc::new(LocalWallet::from_str(&private_key.trim_end_matches("\n").to_string())?);
     let provider = Arc::new(Provider::<Http>::try_from(env::var("NETWORK_RPC_URL").expect("NETWORK_RPC_URL is not exists."))?);
-    let state = Arc::new(Mutex::new(State::<'_, Blake2bHasher>::new(state_prefix.as_bytes(), OptimisticTransactionDB::open_default(state_prefix.clone())?)));
+    let state = Arc::new(Mutex::new(State::<'_, Blake2bHasher>::new(state_path.as_bytes(), OptimisticTransactionDB::open_default(state_path.clone())?)));
     let _client = Client::new(wallet, provider, rpc_server_port, state);
     tokio::spawn(async move {
         // todo: start rpc server
