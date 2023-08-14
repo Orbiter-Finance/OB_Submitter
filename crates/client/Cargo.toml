@@ -7,5 +7,10 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.72"
-clap = "4.3.21"
+clap = { version = "4.3.21", features = ["derive"] }
+clokwerk = "0.4.0"
+dialoguer = "0.10.4"
 dotenv = "0.15.0"
+ethers.workspace = true
+state = { path = "../off-chain-state", package = "off-chain-state" }
+tokio.workspace = true
