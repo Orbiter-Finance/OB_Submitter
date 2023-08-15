@@ -49,21 +49,19 @@ lazy_static! {
 
 pub async fn run() -> Result<()> {
     dotenv().ok();
-    let args = Args::parse();
 
+    let args = Args::parse();
     let rpc_server_port = args.rpc_port;
     println!("rpc_server_port: {}", rpc_server_port);
 
-    // contains 0x prefix
-    // The private key is 32 bytes long
     // for example: 0x0123456789012345678901234567890123456789012345678901234567890123
     let private_key = Password::new()
         .with_prompt("Please enter submitter's private key")
         .interact()?;
-
     let wallet = Arc::new(LocalWallet::from_str(
         &private_key.trim_end_matches("\n").to_string(),
     )?);
+
     let provider = Arc::new(Provider::<Http>::try_from(
         env::var("NETWORK_RPC_URL").expect("NETWORK_RPC_URL is not exists."),
     )?);
@@ -73,18 +71,20 @@ pub async fn run() -> Result<()> {
     )));
 
     let client = Client::new(wallet, provider, rpc_server_port, state.clone());
-    let server = ServerBuilder::new()
+
+    let mut server = ServerBuilder::new()
         .build(format!("127.0.0.1:{}", client.rpc_server_port.clone()))
         .await?;
+    println!("local rpc server: {}", server.local_addr()?);
     let server_handle = server.start(SubmitterApiServerImpl { state: state }.into_rpc())?;
-
     tokio::spawn(server_handle.stopped());
+
     let mut scheduler = Scheduler::new();
     scheduler.every(10.seconds()).run(|| {
+        // todo
         println!("hello world!");
     });
-
-    let service = tokio::spawn(async move {
+    tokio::spawn(async move {
         loop {
             scheduler.run_pending();
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -92,7 +92,6 @@ pub async fn run() -> Result<()> {
         // todo Regularly update data for state.
     });
 
-    println!("client!");
     std::future::pending::<()>().await;
     Ok(())
 }
