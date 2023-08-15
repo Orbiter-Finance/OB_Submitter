@@ -14,6 +14,6 @@ dialoguer = "0.10.4"
 dotenv = "0.15.0"
 jsonrpsee = { version = "0.18.2", features = ["server", "macros", "client"] }
 ethers.workspace = true
-state = { path = "../off-chain-state", package = "off-chain-state" }
+state = { path = "../../../crates/off-chain-state", package = "off-chain-state" }
 tokio.workspace = true
 lazy_static = "1.4.0"
