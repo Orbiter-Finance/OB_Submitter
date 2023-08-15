@@ -23,17 +23,16 @@
 // 2. The scheduler regularly updates the data for the state.
 // 3. The RPC server provides the interface for the state.
 
-
 // mod tests;
 mod traits;
-// pub mod utils;
+pub mod utils;
 
 use bincode;
-pub use rocksdb::prelude::Open;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use byte_slice_cast::AsByteSlice;
 use ethers::types::{Address, U256};
 use rocksdb::prelude::Iterate;
+pub use rocksdb::prelude::Open;
 pub use rocksdb::{DBVector, OptimisticTransaction, OptimisticTransactionDB};
 use rocksdb::{Direction, IteratorMode};
 use serde::{Deserialize, Serialize};
@@ -44,7 +43,7 @@ use std::marker::PhantomData;
 use thiserror::Error;
 // local
 pub use traits::StataTrait;
-// use utils::address_convert_to_h256;
+pub use utils::address_convert_to_h256;
 
 type DefaultStoreMultiSMT<'a, H, T, W> =
     SparseMerkleTree<H, SmtValue, DefaultStoreMultiTree<'a, T, W>>;
@@ -160,7 +159,10 @@ impl<'a, H: Hasher + Default> State<'a, H> {
     }
 }
 
-impl<H> StataTrait<H256, Data> for State<'_, H> where H: Hasher + Default {
+impl<H> StataTrait<H256, Data> for State<'_, H>
+where
+    H: Hasher + Default,
+{
     fn try_update_all(&mut self, future_k_v: Vec<(H256, Data)>) -> Result<H256> {
         let kvs = future_k_v
             .into_iter()
@@ -223,14 +225,11 @@ impl<H> StataTrait<H256, Data> for State<'_, H> where H: Hasher + Default {
 
     fn try_get_merkle_proof(&self, keys: Vec<H256>) -> Result<Vec<u8>> {
         let snapshot = self.db.snapshot();
-        let rocksdb_store_smt: SparseMerkleTree<
-            H,
-            SmtValue,
-            DefaultStoreMultiTree<'_, _, ()>,
-        > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
-            self.prefix,
-            &snapshot,
-        ))?;
+        let rocksdb_store_smt: SparseMerkleTree<H, SmtValue, DefaultStoreMultiTree<'_, _, ()>> =
+            DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
+                self.prefix,
+                &snapshot,
+            ))?;
         let proof = rocksdb_store_smt
             .merkle_proof(keys.clone())?
             .compile(keys)?;
@@ -257,14 +256,11 @@ impl<H> StataTrait<H256, Data> for State<'_, H> where H: Hasher + Default {
 
     fn try_get(&self, key: H256) -> Result<Option<Data>> {
         let snapshot = self.db.snapshot();
-        let rocksdb_store_smt: SparseMerkleTree<
-            H,
-            SmtValue,
-            DefaultStoreMultiTree<'_, _, ()>,
-        > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
-            self.prefix,
-            &snapshot,
-        ))?;
+        let rocksdb_store_smt: SparseMerkleTree<H, SmtValue, DefaultStoreMultiTree<'_, _, ()>> =
+            DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
+                self.prefix,
+                &snapshot,
+            ))?;
         let v = rocksdb_store_smt.get(&key)?;
         let data = v.get_data();
         Ok(Some(data.clone()))
@@ -272,16 +268,12 @@ impl<H> StataTrait<H256, Data> for State<'_, H> where H: Hasher + Default {
 
     fn try_get_root(&self) -> Result<H256> {
         let snapshot = self.db.snapshot();
-        let rocksdb_store_smt: SparseMerkleTree<
-            H,
-            SmtValue,
-            DefaultStoreMultiTree<'_, _, ()>,
-        > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
-            self.prefix,
-            &snapshot,
-        ))?;
+        let rocksdb_store_smt: SparseMerkleTree<H, SmtValue, DefaultStoreMultiTree<'_, _, ()>> =
+            DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
+                self.prefix,
+                &snapshot,
+            ))?;
         let root = *rocksdb_store_smt.root();
         Ok(root)
     }
 }
-

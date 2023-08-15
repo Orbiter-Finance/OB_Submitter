@@ -7,10 +7,13 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.72"
+async-trait = "0.1"
 clap = { version = "4.3.21", features = ["derive"] }
 clokwerk = "0.4.0"
 dialoguer = "0.10.4"
 dotenv = "0.15.0"
+jsonrpsee = { version = "0.18.2", features = ["server", "macros", "client"] }
 ethers.workspace = true
 state = { path = "../off-chain-state", package = "off-chain-state" }
 tokio.workspace = true
+lazy_static = "1.4.0"
