@@ -21,7 +21,6 @@ use tracing::{event, Level};
 use tracing_appender::rolling::daily;
 use tracing_subscriber::FmtSubscriber;
 
-
 pub struct Client<State: StataTrait<H256, Data>, Wallet> {
     pub wallet: Arc<Wallet>,
     // fixme should not be designed like this.
@@ -30,7 +29,7 @@ pub struct Client<State: StataTrait<H256, Data>, Wallet> {
     pub state: Arc<RwLock<State>>,
 }
 
-impl<'a> Client<State<'a, Blake2bHasher>,  LocalWallet> {
+impl<'a> Client<State<'a, Blake2bHasher>, LocalWallet> {
     pub fn new(
         wallet: Arc<LocalWallet>,
         // provider: Arc<Provider<Http>>,
@@ -55,7 +54,10 @@ pub async fn run() -> Result<()> {
     dotenv().ok();
 
     let file_appender = daily("logs", "submitter.log");
-    tracing_subscriber::fmt().with_writer(file_appender).with_max_level(Level::TRACE).init();
+    tracing_subscriber::fmt()
+        .with_writer(file_appender)
+        .with_max_level(Level::TRACE)
+        .init();
 
     let args = Args::parse();
     let rpc_server_port = args.rpc_port;
