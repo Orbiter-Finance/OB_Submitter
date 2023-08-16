@@ -21,7 +21,7 @@
 // todo list
 // 1. Modify the Data structure.
 // 2. The scheduler regularly updates the data for the state.
-// 3. The RPC server provides the interface for the state.
+// 4. Create a Merkle tree for all blocks, and the value of the leaf is the income Merkle root of this block so far.
 
 // mod tests;
 mod traits;
