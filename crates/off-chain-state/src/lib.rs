@@ -24,6 +24,7 @@
 // 4. Create a Merkle tree for all blocks, and the value of the leaf is the income Merkle root of this block so far.
 
 // mod tests;
+pub mod data_example;
 mod traits;
 pub mod utils;
 
@@ -31,6 +32,7 @@ use bincode;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use byte_slice_cast::AsByteSlice;
 use ethers::types::{Address, U256};
+use ethers::utils::rlp::{decode, encode, Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rocksdb::prelude::Iterate;
 pub use rocksdb::prelude::Open;
 pub use rocksdb::{DBVector, OptimisticTransaction, OptimisticTransactionDB};
@@ -39,14 +41,16 @@ use serde::{Deserialize, Serialize};
 use smt_rocksdb_store::default_store::DefaultStoreMultiTree;
 pub use sparse_merkle_tree::{blake2b::Blake2bHasher, traits::Hasher};
 pub use sparse_merkle_tree::{traits::Value, CompiledMerkleProof, SparseMerkleTree, H256};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use thiserror::Error;
+// use ethers::abi::{Token, encode, ParamType, Tokenizable};
 // local
 pub use traits::StataTrait;
 pub use utils::address_convert_to_h256;
 
-type DefaultStoreMultiSMT<'a, H, T, W> =
-    SparseMerkleTree<H, SmtValue, DefaultStoreMultiTree<'a, T, W>>;
+type DefaultStoreMultiSMT<'a, H, T, W, Data> =
+    SparseMerkleTree<H, SmtValue<Data>, DefaultStoreMultiTree<'a, T, W>>;
 
 fn new_blake2b() -> Blake2b {
     Blake2bBuilder::new(32).personal(b"SMT").build()
@@ -67,28 +71,35 @@ pub enum Error {
 
 /// The value stored in the sparse Merkle tree.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct SmtValue {
-    data: Data,
+pub struct SmtValue<Data> {
+    datas: Vec<Data>,
     serialized_data: Vec<u8>,
 }
 
-impl Default for SmtValue {
+impl<Data: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> Default
+    for SmtValue<Data>
+{
     fn default() -> Self {
-        SmtValue::new(Data::default()).unwrap()
+        SmtValue::new(vec![]).unwrap()
     }
 }
 
-impl SmtValue {
-    pub fn new(data: Data) -> Result<Self> {
-        let serialized_data = bincode::serialize(&data)?;
+impl<Data: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> SmtValue<Data> {
+    pub fn new(datas: Vec<Data>) -> Result<Self> {
+        let mut stream = RlpStream::new();
+        stream.begin_list(datas.len());
+        for d in datas.clone() {
+            stream.append(&d);
+        }
+
         Ok(SmtValue {
-            data,
-            serialized_data: serialized_data.clone(),
+            datas,
+            serialized_data: stream.out().to_vec(),
         })
     }
 
-    pub fn get_data(&self) -> &Data {
-        &self.data
+    pub fn get_datas(&self) -> Vec<Data> {
+        self.datas.clone()
     }
 
     pub fn get_serialized_data(&self) -> &[u8] {
@@ -96,14 +107,7 @@ impl SmtValue {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq)]
-pub struct Data {
-    pub address: Address,
-    pub nonce: u64,
-    pub deposit: U256,
-}
-
-impl Value for SmtValue {
+impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> Value for SmtValue<D> {
     fn to_h256(&self) -> H256 {
         match self {
             // H256::zero() is very important and involves the retention of leaf data.
@@ -123,17 +127,21 @@ impl Value for SmtValue {
     }
 }
 
-impl From<DBVector> for SmtValue {
+impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> From<DBVector>
+    for SmtValue<D>
+{
     fn from(v: DBVector) -> Self {
-        let data = bincode::deserialize(v.as_byte_slice()).unwrap();
+        let decode_date = Rlp::new(v.as_ref()).as_list::<D>().unwrap();
         SmtValue {
-            data,
+            datas: decode_date,
             serialized_data: v.to_vec(),
         }
     }
 }
 
-impl AsRef<[u8]> for SmtValue {
+impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> AsRef<[u8]>
+    for SmtValue<D>
+{
     fn as_ref(&self) -> &[u8] {
         self.get_serialized_data()
     }
@@ -142,13 +150,22 @@ impl AsRef<[u8]> for SmtValue {
 /// The state of the bundler.
 /// stores off-chain state, its merkle root is stored on-chain.
 /// Each entry point contract of each chain has a state.
-pub struct State<'a, H: Hasher + Default> {
+pub struct State<
+    'a,
+    H: Hasher + Default,
+    D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable,
+> {
     prefix: &'a [u8],
     db: OptimisticTransactionDB,
-    _hasher: PhantomData<H>,
+    _hasher: PhantomData<(H, D)>,
 }
 
-impl<'a, H: Hasher + Default> State<'a, H> {
+impl<
+        'a,
+        H: Hasher + Default,
+        D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable,
+    > State<'a, H, D>
+{
     pub fn new(prefix: &'a [u8], db: OptimisticTransactionDB) -> Self {
         // todo Check if it has been created
         State {
@@ -159,23 +176,24 @@ impl<'a, H: Hasher + Default> State<'a, H> {
     }
 }
 
-impl<H> StataTrait<H256, Data> for State<'_, H>
+impl<H, Data: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable>
+    StataTrait<H256, Data> for State<'_, H, Data>
 where
     H: Hasher + Default,
 {
-    fn try_update_all(&mut self, future_k_v: Vec<(H256, Data)>) -> Result<H256> {
+    fn try_update_all(&mut self, future_k_v: Vec<(H256, Vec<Data>)>) -> Result<H256> {
         let kvs = future_k_v
             .into_iter()
             .map(|(k, v)| match SmtValue::new(v) {
                 Ok(v) => Ok((k, v)),
                 Err(e) => Err(e),
             })
-            .collect::<Result<Vec<(H256, SmtValue)>>>()?;
+            .collect::<Result<Vec<(H256, SmtValue<Data>)>>>()?;
 
         let tx = self.db.transaction_default();
         let mut rocksdb_store_smt: SparseMerkleTree<
             H,
-            SmtValue,
+            SmtValue<Data>,
             DefaultStoreMultiTree<'_, OptimisticTransaction, ()>,
         > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::new(self.prefix, &tx))?;
         rocksdb_store_smt.update_all(kvs)?;
@@ -188,7 +206,7 @@ where
         let prefix = self.prefix;
         let prefix_len = prefix.len();
         let leaf_key_len = prefix_len + 32;
-        let kvs: Vec<(H256, SmtValue)> = snapshot
+        let kvs: Vec<(H256, SmtValue<Data>)> = snapshot
             .iterator(IteratorMode::From(prefix, Direction::Forward))
             .take_while(|(k, _)| k.starts_with(prefix))
             .filter_map(|(k, _)| {
@@ -204,7 +222,7 @@ where
         let tx = self.db.transaction_default();
         let mut rocksdb_store_smt: SparseMerkleTree<
             H,
-            SmtValue,
+            SmtValue<Data>,
             DefaultStoreMultiTree<'_, OptimisticTransaction, ()>,
         > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::new(
             prefix.as_byte_slice(),
@@ -225,11 +243,14 @@ where
 
     fn try_get_merkle_proof(&self, keys: Vec<H256>) -> Result<Vec<u8>> {
         let snapshot = self.db.snapshot();
-        let rocksdb_store_smt: SparseMerkleTree<H, SmtValue, DefaultStoreMultiTree<'_, _, ()>> =
-            DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
-                self.prefix,
-                &snapshot,
-            ))?;
+        let rocksdb_store_smt: SparseMerkleTree<
+            H,
+            SmtValue<Data>,
+            DefaultStoreMultiTree<'_, _, ()>,
+        > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
+            self.prefix,
+            &snapshot,
+        ))?;
         let proof = rocksdb_store_smt
             .merkle_proof(keys.clone())?
             .compile(keys)?;
@@ -239,7 +260,7 @@ where
     fn try_get_future_root(
         &self,
         old_proof: Vec<u8>,
-        future_k_v: Vec<(H256, Data)>,
+        future_k_v: Vec<(H256, Vec<Data>)>,
     ) -> Result<H256> {
         let p = CompiledMerkleProof(old_proof);
         let kvs = future_k_v
@@ -254,25 +275,31 @@ where
         Ok(f_root)
     }
 
-    fn try_get(&self, key: H256) -> Result<Option<Data>> {
+    fn try_get(&self, key: H256) -> Result<Option<Vec<Data>>> {
         let snapshot = self.db.snapshot();
-        let rocksdb_store_smt: SparseMerkleTree<H, SmtValue, DefaultStoreMultiTree<'_, _, ()>> =
-            DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
-                self.prefix,
-                &snapshot,
-            ))?;
+        let rocksdb_store_smt: SparseMerkleTree<
+            H,
+            SmtValue<Data>,
+            DefaultStoreMultiTree<'_, _, ()>,
+        > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
+            self.prefix,
+            &snapshot,
+        ))?;
         let v = rocksdb_store_smt.get(&key)?;
-        let data = v.get_data();
+        let data = v.get_datas();
         Ok(Some(data.clone()))
     }
 
     fn try_get_root(&self) -> Result<H256> {
         let snapshot = self.db.snapshot();
-        let rocksdb_store_smt: SparseMerkleTree<H, SmtValue, DefaultStoreMultiTree<'_, _, ()>> =
-            DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
-                self.prefix,
-                &snapshot,
-            ))?;
+        let rocksdb_store_smt: SparseMerkleTree<
+            H,
+            SmtValue<Data>,
+            DefaultStoreMultiTree<'_, _, ()>,
+        > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
+            self.prefix,
+            &snapshot,
+        ))?;
         let root = *rocksdb_store_smt.root();
         Ok(root)
     }
