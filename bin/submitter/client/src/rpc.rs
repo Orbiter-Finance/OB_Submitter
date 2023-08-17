@@ -1,3 +1,5 @@
+#![allow(unreachable_patterns)]
+
 use crate::api::SubmitterApiServer;
 use async_trait::async_trait;
 use ethers::types::{Address, U256};
@@ -7,6 +9,7 @@ use state::Error as StateError;
 use state::{address_convert_to_h256, Blake2bHasher, StataTrait, State, H256};
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
+
 pub const STATE_ERROR_CODE: i32 = 666;
 pub const RWLOCK_READ_ERROR_CODE: i32 = 888;
 pub const ACCOUNT_NOT_EXISTS_CODE: i32 = 777;
