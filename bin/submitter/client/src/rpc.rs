@@ -1,10 +1,10 @@
 #![allow(unreachable_patterns)]
 
-use crate::api::SubmitterApiServer;
 use async_trait::async_trait;
 use ethers::types::{Address, U256};
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{error::ErrorCode, ErrorObject, ErrorObjectOwned};
+use primitives::{traits::SubmitterApiServer, types::*};
 use state::data_example::Data;
 use state::Error as StateError;
 use state::{address_convert_to_h256, Blake2bHasher, StataTrait, State, H256};
@@ -47,7 +47,7 @@ impl From<StateError> for JsonRpcError {
 }
 
 pub struct SubmitterApiServerImpl<'a> {
-    pub state: Arc<RwLock<State<'a, Blake2bHasher, Data>>>,
+    pub state: Arc<RwLock<State<'a, Blake2bHasher, ProfitStateData>>>,
 }
 
 #[async_trait]
@@ -68,7 +68,8 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
                 format!("error: account is not in off-chain-state."),
                 None::<bool>,
             ))?[0]
-            .deposit;
+            // fixme
+            .balance;
         Ok(balance)
     }
 

@@ -1,6 +1,5 @@
 use super::rpc::SubmitterApiServerImpl;
 use super::Args;
-use crate::api::SubmitterApiServer;
 use anyhow::Result;
 use clap::Parser;
 use clokwerk::{Scheduler, TimeUnits};
@@ -13,6 +12,10 @@ use jsonrpsee::{
     Methods,
 };
 use lazy_static::lazy_static;
+use primitives::{
+    traits::SubmitterApiServer,
+    types::{BlocksStateData, ProfitStateData},
+};
 use state::data_example::Data as DataExample;
 use state::{Blake2bHasher, Open, OptimisticTransactionDB, StataTrait, State, H256};
 use std::env;
@@ -24,20 +27,30 @@ use tracing_appender::rolling::daily;
 use tracing_subscriber::fmt::format;
 use tracing_subscriber::FmtSubscriber;
 
-pub struct Client<State: StataTrait<H256, DataExample>, Wallet> {
+pub struct Client<
+    Profit: StataTrait<H256, ProfitStateData>,
+    Blocks: StataTrait<H256, BlocksStateData>,
+    Wallet,
+> {
     pub wallet: Arc<Wallet>,
     pub rpc_server_port: u16,
-    pub profit_state: Arc<RwLock<State>>,
-    pub blocks_state: Arc<RwLock<State>>,
+    pub profit_state: Arc<RwLock<Profit>>,
+    pub blocks_state: Arc<RwLock<Blocks>>,
 }
 
-impl<'a> Client<State<'a, Blake2bHasher, DataExample>, LocalWallet> {
+impl<'a>
+    Client<
+        State<'a, Blake2bHasher, ProfitStateData>,
+        State<'a, Blake2bHasher, BlocksStateData>,
+        LocalWallet,
+    >
+{
     pub fn new(
         wallet: Arc<LocalWallet>,
         // provider: Arc<Provider<Http>>,
         rpc_server_port: u16,
-        profit_state: Arc<RwLock<State<'a, Blake2bHasher, DataExample>>>,
-        blocks_state: Arc<RwLock<State<'a, Blake2bHasher, DataExample>>>,
+        profit_state: Arc<RwLock<State<'a, Blake2bHasher, ProfitStateData>>>,
+        blocks_state: Arc<RwLock<State<'a, Blake2bHasher, BlocksStateData>>>,
     ) -> Self {
         Client {
             wallet,
@@ -95,31 +108,35 @@ pub async fn run() -> Result<()> {
     )?);
     event!(Level::INFO, "The wallet is created.");
 
-    let profit_state = Arc::new(RwLock::new(State::<'_, Blake2bHasher, DataExample>::new(
-        PROFIT_STATE_DB_PATH
-            .get()
-            .expect("profit state db' path not set")
-            .as_ref(),
-        OptimisticTransactionDB::open_default(
+    let profit_state = Arc::new(RwLock::new(
+        State::<'_, Blake2bHasher, ProfitStateData>::new(
             PROFIT_STATE_DB_PATH
                 .get()
-                .expect("profit state db' path not set"),
-        )?,
-    )));
+                .expect("profit state db' path not set")
+                .as_ref(),
+            OptimisticTransactionDB::open_default(
+                PROFIT_STATE_DB_PATH
+                    .get()
+                    .expect("profit state db' path not set"),
+            )?,
+        ),
+    ));
     event!(
         Level::INFO,
         "Profit state's db is created! path is: {:?}",
         PROFIT_STATE_DB_PATH.get().unwrap()
     );
-    let blocks_state = Arc::new(RwLock::new(State::<'_, Blake2bHasher, DataExample>::new(
-        BLOCKS_STATE_DB_PATH
-            .get()
-            .expect("blocks state db' path not set")
-            .as_ref(),
-        OptimisticTransactionDB::open_default(
-            BLOCKS_STATE_DB_PATH.get().expect("state db' path not set"),
-        )?,
-    )));
+    let blocks_state = Arc::new(RwLock::new(
+        State::<'_, Blake2bHasher, BlocksStateData>::new(
+            BLOCKS_STATE_DB_PATH
+                .get()
+                .expect("blocks state db' path not set")
+                .as_ref(),
+            OptimisticTransactionDB::open_default(
+                BLOCKS_STATE_DB_PATH.get().expect("state db' path not set"),
+            )?,
+        ),
+    ));
     event!(
         Level::INFO,
         "Blocks state's db is created! path is: {:?}",

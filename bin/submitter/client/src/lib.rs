@@ -1,4 +1,3 @@
-pub mod api;
 mod cli;
 mod command;
 mod rpc;

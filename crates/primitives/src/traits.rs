@@ -1,7 +1,4 @@
 use ethers::types::{Address, U256};
-use state::H256;
-use std::ops::Add;
-
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 // The rpc interface provided to the user externally.

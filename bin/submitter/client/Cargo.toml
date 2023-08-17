@@ -15,6 +15,7 @@ dotenv = "0.15.0"
 jsonrpsee = { version = "0.18.2", features = ["server", "macros", "client"] }
 ethers.workspace = true
 state = { path = "../../../crates/off-chain-state", package = "off-chain-state" }
+primitives = { path = "../../../crates/primitives"}
 tokio.workspace = true
 lazy_static = "1.4.0"
 tracing.workspace = true

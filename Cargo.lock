@@ -597,6 +597,7 @@ dependencies = [
  "jsonrpsee",
  "lazy_static",
  "off-chain-state",
+ "primitives",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -2711,6 +2712,11 @@ dependencies = [
 [[package]]
 name = "primitives"
 version = "0.1.0"
+dependencies = [
+ "ethers",
+ "jsonrpsee",
+ "sparse-merkle-tree",
+]
 
 [[package]]
 name = "proc-macro-crate"
