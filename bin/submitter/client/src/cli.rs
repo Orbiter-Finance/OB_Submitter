@@ -13,7 +13,8 @@ use jsonrpsee::{
     Methods,
 };
 use lazy_static::lazy_static;
-use state::{Blake2bHasher, Data, Open, OptimisticTransactionDB, StataTrait, State, H256};
+use state::data_example::Data as DataExample;
+use state::{Blake2bHasher, Open, OptimisticTransactionDB, StataTrait, State, H256};
 use std::env;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
@@ -23,20 +24,20 @@ use tracing_appender::rolling::daily;
 use tracing_subscriber::fmt::format;
 use tracing_subscriber::FmtSubscriber;
 
-pub struct Client<State: StataTrait<H256, Data>, Wallet> {
+pub struct Client<State: StataTrait<H256, DataExample>, Wallet> {
     pub wallet: Arc<Wallet>,
     pub rpc_server_port: u16,
     pub profit_state: Arc<RwLock<State>>,
     pub blocks_state: Arc<RwLock<State>>,
 }
 
-impl<'a> Client<State<'a, Blake2bHasher>, LocalWallet> {
+impl<'a> Client<State<'a, Blake2bHasher, DataExample>, LocalWallet> {
     pub fn new(
         wallet: Arc<LocalWallet>,
         // provider: Arc<Provider<Http>>,
         rpc_server_port: u16,
-        profit_state: Arc<RwLock<State<'a, Blake2bHasher>>>,
-        blocks_state: Arc<RwLock<State<'a, Blake2bHasher>>>,
+        profit_state: Arc<RwLock<State<'a, Blake2bHasher, DataExample>>>,
+        blocks_state: Arc<RwLock<State<'a, Blake2bHasher, DataExample>>>,
     ) -> Self {
         Client {
             wallet,
@@ -94,7 +95,7 @@ pub async fn run() -> Result<()> {
     )?);
     event!(Level::INFO, "The wallet is created.");
 
-    let profit_state = Arc::new(RwLock::new(State::<'_, Blake2bHasher>::new(
+    let profit_state = Arc::new(RwLock::new(State::<'_, Blake2bHasher, DataExample>::new(
         PROFIT_STATE_DB_PATH
             .get()
             .expect("profit state db' path not set")
@@ -110,7 +111,7 @@ pub async fn run() -> Result<()> {
         "Profit state's db is created! path is: {:?}",
         PROFIT_STATE_DB_PATH.get().unwrap()
     );
-    let blocks_state = Arc::new(RwLock::new(State::<'_, Blake2bHasher>::new(
+    let blocks_state = Arc::new(RwLock::new(State::<'_, Blake2bHasher, DataExample>::new(
         BLOCKS_STATE_DB_PATH
             .get()
             .expect("blocks state db' path not set")

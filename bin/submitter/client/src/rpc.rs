@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use ethers::types::{Address, U256};
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{error::ErrorCode, ErrorObject, ErrorObjectOwned};
+use state::data_example::Data;
 use state::Error as StateError;
 use state::{address_convert_to_h256, Blake2bHasher, StataTrait, State, H256};
 use std::ops::Deref;
@@ -46,7 +47,7 @@ impl From<StateError> for JsonRpcError {
 }
 
 pub struct SubmitterApiServerImpl<'a> {
-    pub state: Arc<RwLock<State<'a, Blake2bHasher>>>,
+    pub state: Arc<RwLock<State<'a, Blake2bHasher, Data>>>,
 }
 
 #[async_trait]
@@ -66,7 +67,7 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
                 ACCOUNT_NOT_EXISTS_CODE,
                 format!("error: account is not in off-chain-state."),
                 None::<bool>,
-            ))?
+            ))?[0]
             .deposit;
         Ok(balance)
     }
