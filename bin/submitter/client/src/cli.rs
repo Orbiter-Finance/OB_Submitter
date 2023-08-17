@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::OnceCell;
 use tracing::{event, Level};
 use tracing_appender::rolling::daily;
+use tracing_subscriber::fmt::format;
 use tracing_subscriber::FmtSubscriber;
 
 pub struct Client<State: StataTrait<H256, Data>, Wallet> {
@@ -55,20 +56,26 @@ lazy_static! {
 pub async fn run() -> Result<()> {
     dotenv().ok();
 
-    let file_appender = daily("logs", "submitter.log");
+    let args = Args::parse();
+
+    let rpc_server_port = args.rpc_port;
+
+    let file_appender = daily(format!("{}/logs", args.db_path), "submitter.log");
     tracing_subscriber::fmt()
         .with_writer(file_appender)
         .with_max_level(Level::TRACE)
         .init();
+    event!(
+        Level::INFO,
+        "Submitter log init success, and log path: {}/logs/",
+        args.db_path
+    );
 
-    let args = Args::parse();
-    let rpc_server_port = args.rpc_port;
-    PROFIT_STATE_DB_PATH
-        .set(args.profit_db_path.clone())
-        .unwrap();
-    BLOCKS_STATE_DB_PATH
-        .set(args.blocks_db_path.clone())
-        .unwrap();
+    let profit_state_db_path = format!("{}/profit", args.db_path);
+    let blocks_state_db_path = format!("{}/blocks", args.db_path);
+
+    PROFIT_STATE_DB_PATH.set(profit_state_db_path).unwrap();
+    BLOCKS_STATE_DB_PATH.set(blocks_state_db_path).unwrap();
     assert!(
         PROFIT_STATE_DB_PATH
             .get()
@@ -100,7 +107,7 @@ pub async fn run() -> Result<()> {
     )));
     event!(
         Level::INFO,
-        "profit state's db is created! path is: {:?}",
+        "Profit state's db is created! path is: {:?}",
         PROFIT_STATE_DB_PATH.get().unwrap()
     );
     let blocks_state = Arc::new(RwLock::new(State::<'_, Blake2bHasher>::new(
@@ -114,7 +121,7 @@ pub async fn run() -> Result<()> {
     )));
     event!(
         Level::INFO,
-        "blocks state's db is created! path is: {:?}",
+        "Blocks state's db is created! path is: {:?}",
         BLOCKS_STATE_DB_PATH.get().unwrap()
     );
 
@@ -125,6 +132,7 @@ pub async fn run() -> Result<()> {
         blocks_state.clone(),
     );
     event!(Level::INFO, "The client is created.");
+
     let server = ServerBuilder::new()
         .build(format!("127.0.0.1:{}", client.rpc_server_port))
         .await?;
