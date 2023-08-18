@@ -18,7 +18,7 @@ use primitives::{
     types::{BlocksStateData, ProfitStateData},
 };
 use state::data_example::Data as DataExample;
-use state::{Blake2bHasher, Open, OptimisticTransactionDB, State, H256};
+use state::{Keccak256Hasher, Open, OptimisticTransactionDB, State, H256};
 use std::env;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
@@ -41,8 +41,8 @@ pub struct Client<
 
 impl<'a>
     Client<
-        State<'a, Blake2bHasher, ProfitStateData>,
-        State<'a, Blake2bHasher, BlocksStateData>,
+        State<'a, Keccak256Hasher, ProfitStateData>,
+        State<'a, Keccak256Hasher, BlocksStateData>,
         LocalWallet,
     >
 {
@@ -50,8 +50,8 @@ impl<'a>
         wallet: Arc<LocalWallet>,
         // provider: Arc<Provider<Http>>,
         rpc_server_port: u16,
-        profit_state: Arc<RwLock<State<'a, Blake2bHasher, ProfitStateData>>>,
-        blocks_state: Arc<RwLock<State<'a, Blake2bHasher, BlocksStateData>>>,
+        profit_state: Arc<RwLock<State<'a, Keccak256Hasher, ProfitStateData>>>,
+        blocks_state: Arc<RwLock<State<'a, Keccak256Hasher, BlocksStateData>>>,
     ) -> Self {
         Client {
             wallet,
@@ -110,7 +110,7 @@ pub async fn run() -> Result<()> {
     event!(Level::INFO, "The wallet is created.");
 
     let profit_state = Arc::new(RwLock::new(
-        State::<'_, Blake2bHasher, ProfitStateData>::new(
+        State::<'_, Keccak256Hasher, ProfitStateData>::new(
             PROFIT_STATE_DB_PATH
                 .get()
                 .expect("profit state db' path not set")
@@ -128,7 +128,7 @@ pub async fn run() -> Result<()> {
         PROFIT_STATE_DB_PATH.get().unwrap()
     );
     let blocks_state = Arc::new(RwLock::new(
-        State::<'_, Blake2bHasher, BlocksStateData>::new(
+        State::<'_, Keccak256Hasher, BlocksStateData>::new(
             BLOCKS_STATE_DB_PATH
                 .get()
                 .expect("blocks state db' path not set")

@@ -25,12 +25,15 @@
 
 // mod tests;
 pub mod data_example;
+mod keccak256_hasher;
 
 use bincode;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use byte_slice_cast::AsByteSlice;
 use ethers::types::{Address, U256};
+use ethers::utils::keccak256;
 use ethers::utils::rlp::{decode, encode, Decodable, DecoderError, Encodable, Rlp, RlpStream};
+pub use keccak256_hasher::Keccak256Hasher;
 use primitives::{
     error::Result,
     func::{address_convert_to_h256, new_blake2b},
@@ -42,7 +45,7 @@ pub use rocksdb::{DBVector, OptimisticTransaction, OptimisticTransactionDB};
 use rocksdb::{Direction, IteratorMode};
 use serde::{Deserialize, Serialize};
 use smt_rocksdb_store::default_store::DefaultStoreMultiTree;
-pub use sparse_merkle_tree::{blake2b::Blake2bHasher, traits::Hasher};
+pub use sparse_merkle_tree::traits::Hasher;
 pub use sparse_merkle_tree::{traits::Value, CompiledMerkleProof, SparseMerkleTree, H256};
 use std::fmt::Debug;
 use std::marker::PhantomData;

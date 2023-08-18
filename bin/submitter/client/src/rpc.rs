@@ -6,7 +6,7 @@ use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{error::ErrorCode, ErrorObject, ErrorObjectOwned};
 use primitives::{constants::*, traits::SubmitterApiServer, types::*};
 use primitives::{error::Error as StateError, func::*, traits::StataTrait};
-use state::{Blake2bHasher, State, H256};
+use state::{Keccak256Hasher, State, H256};
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
@@ -42,7 +42,7 @@ impl From<StateError> for JsonRpcError {
 }
 
 pub struct SubmitterApiServerImpl<'a> {
-    pub state: Arc<RwLock<State<'a, Blake2bHasher, ProfitStateData>>>,
+    pub state: Arc<RwLock<State<'a, Keccak256Hasher, ProfitStateData>>>,
 }
 
 #[async_trait]
