@@ -2988,10 +2988,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpc"
-version = "0.1.0"
-
-[[package]]
 name = "rust-ini"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3545,17 +3541,6 @@ dependencies = [
  "quote",
  "rustversion",
  "syn 2.0.28",
-]
-
-[[package]]
-name = "submitter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "client",
- "dialoguer",
- "dotenv",
- "tokio",
 ]
 
 [[package]]

@@ -1,10 +1,10 @@
 use anyhow::Result;
-use submitter_client;
+use submitter_lib as submitter;
 use tokio;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    submitter_client::run().await?;
+    submitter::run().await?;
     std::future::pending::<()>().await;
     Ok(())
 }
