@@ -25,14 +25,17 @@
 
 // mod tests;
 pub mod data_example;
-mod traits;
-pub mod utils;
 
 use bincode;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use byte_slice_cast::AsByteSlice;
 use ethers::types::{Address, U256};
 use ethers::utils::rlp::{decode, encode, Decodable, DecoderError, Encodable, Rlp, RlpStream};
+use primitives::{
+    error::Result,
+    func::{address_convert_to_h256, new_blake2b},
+    traits::StataTrait,
+};
 use rocksdb::prelude::Iterate;
 pub use rocksdb::prelude::Open;
 pub use rocksdb::{DBVector, OptimisticTransaction, OptimisticTransactionDB};
@@ -44,30 +47,9 @@ pub use sparse_merkle_tree::{traits::Value, CompiledMerkleProof, SparseMerkleTre
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use thiserror::Error;
-// use ethers::abi::{Token, encode, ParamType, Tokenizable};
-// local
-pub use traits::StataTrait;
-pub use utils::address_convert_to_h256;
 
 type DefaultStoreMultiSMT<'a, H, T, W, Data> =
     SparseMerkleTree<H, SmtValue<Data>, DefaultStoreMultiTree<'a, T, W>>;
-
-fn new_blake2b() -> Blake2b {
-    Blake2bBuilder::new(32).personal(b"SMT").build()
-}
-
-type Result<T> = std::result::Result<T, Error>;
-
-/// The error type for state.
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("binary serialization or deserialization errors")]
-    BincodeError(#[from] bincode::Error),
-    #[error("ckb-rocksdb errors")]
-    RocksDBError(#[from] rocksdb::Error),
-    #[error("sparse-merkle-tree errors")]
-    SparseMerkleTreeError(#[from] sparse_merkle_tree::error::Error),
-}
 
 /// The value stored in the sparse Merkle tree.
 #[derive(Debug, Clone, Eq, PartialEq)]

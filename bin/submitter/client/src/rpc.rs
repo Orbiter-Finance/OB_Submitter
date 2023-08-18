@@ -4,16 +4,11 @@ use async_trait::async_trait;
 use ethers::types::{Address, U256};
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{error::ErrorCode, ErrorObject, ErrorObjectOwned};
-use primitives::{traits::SubmitterApiServer, types::*};
-use state::data_example::Data;
-use state::Error as StateError;
-use state::{address_convert_to_h256, Blake2bHasher, StataTrait, State, H256};
+use primitives::{constants::*, traits::SubmitterApiServer, types::*};
+use primitives::{error::Error as StateError, func::*, traits::StataTrait};
+use state::{Blake2bHasher, State, H256};
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
-
-pub const STATE_ERROR_CODE: i32 = 666;
-pub const RWLOCK_READ_ERROR_CODE: i32 = 888;
-pub const ACCOUNT_NOT_EXISTS_CODE: i32 = 777;
 
 pub struct JsonRpcError(pub ErrorObjectOwned);
 

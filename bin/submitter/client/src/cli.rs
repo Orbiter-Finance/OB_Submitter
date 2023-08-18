@@ -12,12 +12,13 @@ use jsonrpsee::{
     Methods,
 };
 use lazy_static::lazy_static;
+use primitives::traits::StataTrait;
 use primitives::{
     traits::SubmitterApiServer,
     types::{BlocksStateData, ProfitStateData},
 };
 use state::data_example::Data as DataExample;
-use state::{Blake2bHasher, Open, OptimisticTransactionDB, StataTrait, State, H256};
+use state::{Blake2bHasher, Open, OptimisticTransactionDB, State, H256};
 use std::env;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};

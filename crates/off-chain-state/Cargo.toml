@@ -10,6 +10,7 @@ sparse-merkle-tree = "0.6.1"
 blake2b-rs = "0.2.0"
 smt-rocksdb-store = { git = "https://github.com/quake/smt-rocksdb-store.git", branch= "master" }
 ethers.workspace = true
+primitives = { path = "../primitives" }
 rocksdb = { package = "ckb-rocksdb", version = "0.19", default-features = false, features = ["snappy", "march-native"] }
 byte-slice-cast = "1.2.2"
 tracing.workspace = true

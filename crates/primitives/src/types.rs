@@ -2,6 +2,7 @@ use ethers::{
     types::{Address, H256, U256},
     utils::rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream},
 };
+use serde::{Deserialize, Serialize};
 // use sparse_merkle_tree::H256;
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -40,18 +41,44 @@ impl Decodable for ProfitStateData {
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct BlocksStateData {
     pub root: H256,
+    pub txs: H256,
 }
 
 impl Decodable for BlocksStateData {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
         let root = rlp.val_at(0)?;
-        Ok(BlocksStateData { root })
+        let txs = rlp.val_at(1)?;
+        Ok(BlocksStateData { root, txs })
     }
 }
 
 impl Encodable for BlocksStateData {
     fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_list(1);
+        s.begin_list(2);
         s.append(&self.root);
+        s.append(&self.txs);
     }
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrossTxData {
+    pub dealer_address: String,
+    pub profit: String,
+    pub source_address: String,
+    pub source_amount: String,
+    pub source_chain: String,
+    pub source_id: String,
+    pub source_maker: String,
+    pub source_symbol: String,
+    pub source_time: String,
+    pub source_token: String,
+    pub target_address: String,
+    pub target_amount: String,
+    pub target_chain: String,
+    pub target_id: String,
+    pub target_maker: String,
+    pub target_symbol: String,
+    pub target_time: String,
+    pub target_token: String,
 }
