@@ -26,6 +26,7 @@
 // mod tests;
 pub mod data_example;
 mod keccak256_hasher;
+mod tests;
 
 use bincode;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
@@ -34,11 +35,7 @@ use ethers::types::{Address, U256};
 use ethers::utils::keccak256;
 use ethers::utils::rlp::{decode, encode, Decodable, DecoderError, Encodable, Rlp, RlpStream};
 pub use keccak256_hasher::Keccak256Hasher;
-use primitives::{
-    error::Result,
-    func::{address_convert_to_h256, new_blake2b},
-    traits::StataTrait,
-};
+use primitives::{error::Result, func::address_convert_to_h256, traits::StataTrait};
 use rocksdb::prelude::Iterate;
 pub use rocksdb::prelude::Open;
 pub use rocksdb::{DBVector, OptimisticTransaction, OptimisticTransactionDB};
@@ -97,13 +94,7 @@ impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> Value 
         match self {
             // H256::zero() is very important and involves the retention of leaf data.
             a if a == &Default::default() => H256::zero(),
-            _ => {
-                let mut hasher = new_blake2b();
-                let mut buf = [0u8; 32];
-                hasher.update(self.get_serialized_data());
-                hasher.finalize(&mut buf);
-                buf.into()
-            }
+            _ => keccak256(self.get_serialized_data()).into(),
         }
     }
 
@@ -152,7 +143,6 @@ impl<
     > State<'a, H, D>
 {
     pub fn new(prefix: &'a [u8], db: OptimisticTransactionDB) -> Self {
-        // todo Check if it has been created
         State {
             prefix,
             db,
