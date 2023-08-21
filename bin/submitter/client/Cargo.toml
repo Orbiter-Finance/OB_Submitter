@@ -29,4 +29,6 @@ lazy_static = "1.4.0"
 tracing.workspace = true
 tracing-appender = "0.2.2"
 tracing-subscriber = "0.3.17"
+serde_json = "1.0.105"
+hex = "0.4.3"
 

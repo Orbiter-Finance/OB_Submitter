@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use ethers::types::{Address, U256};
+use ethers::utils::hex;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{error::ErrorCode, ErrorObject, ErrorObjectOwned};
 use primitives::{constants::*, traits::SubmitterApiServer, types::*};
@@ -47,7 +48,7 @@ pub struct SubmitterApiServerImpl<'a> {
 
 #[async_trait]
 impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
-    async fn get_balance(&self, address: Address) -> RpcResult<U256> {
+    async fn get_profit_info(&self, address: Address) -> RpcResult<String> {
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_READ_ERROR_CODE,
@@ -55,20 +56,18 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
                 None::<bool>,
             )
         })?;
-        let balance = state
+        let info = state
             .try_get(address_convert_to_h256(address))
             .map_err(|e| Into::<JsonRpcError>::into(e))?
             .ok_or(ErrorObject::owned(
                 ACCOUNT_NOT_EXISTS_CODE,
                 format!("error: account is not in off-chain-state."),
                 None::<bool>,
-            ))?[0]
-            // fixme
-            .balance;
-        Ok(balance)
+            ))?;
+        Ok(serde_json::to_string(&info).unwrap())
     }
 
-    async fn get_root(&self) -> RpcResult<[u8; 32]> {
+    async fn get_root(&self) -> RpcResult<String> {
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_READ_ERROR_CODE,
@@ -79,10 +78,10 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
         let root = state
             .try_get_root()
             .map_err(|e| Into::<JsonRpcError>::into(e))?;
-        Ok(root.into())
+        Ok(hex::encode(Into::<[u8; 32]>::into(root)))
     }
 
-    async fn get_proof(&self, address: Address) -> RpcResult<Vec<u8>> {
+    async fn get_proof(&self, address: Address) -> RpcResult<String> {
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_READ_ERROR_CODE,
@@ -93,7 +92,7 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
         let proof = state
             .try_get_merkle_proof(vec![address_convert_to_h256(address)])
             .map_err(|e| Into::<JsonRpcError>::into(e))?;
-        Ok(proof)
+        Ok(hex::encode(proof))
     }
 
     async fn verify(&self, address: Address, proof: Vec<u8>) -> RpcResult<bool> {
