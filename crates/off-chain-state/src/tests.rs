@@ -35,7 +35,7 @@ fn main() {
     println!("-------------------------------------------------------");
     println!("datas rlp: {:?}", value.get_serialized_data());
     let datas_h256 = value.to_h256();
-
+    println!("datas h256: {:?}", datas_h256);
     // get alice
     let alice = address_convert_to_h256(
         Address::from_str("0x0000000000000000000000000000000000000001").unwrap(),

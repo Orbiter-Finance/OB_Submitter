@@ -96,6 +96,7 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
     }
 
     async fn verify(&self, address: Address, proof: Vec<u8>) -> RpcResult<bool> {
+
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_READ_ERROR_CODE,

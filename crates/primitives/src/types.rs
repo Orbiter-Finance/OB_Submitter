@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use ethers::{
     types::{Address, H256, U256},
     utils::rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream},
@@ -5,7 +6,7 @@ use ethers::{
 use serde::{Deserialize, Serialize};
 // use sparse_merkle_tree::H256;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct ProfitStateData {
     pub token: Address,
     pub token_chain_id: u64,
@@ -81,4 +82,36 @@ pub struct CrossTxData {
     pub target_symbol: String,
     pub target_time: String,
     pub target_token: String,
+    pub target_timestamp: u64,
 }
+
+
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+pub struct BlockStorage {
+    pub chill_duration: u64,
+    pub challenge: u64,
+    pub withdraw_duration: u64,
+    pub last_update_block: u64,
+    pub last_submit_timestamp: u64,
+    pub support_chains: Vec<u64>,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+pub struct WithdrawEvent {
+    pub dealer_address: Address,
+    pub maker_address: Address,
+    pub chain_id: u64,
+    pub token_address: Address,
+    pub balance: U256,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+pub struct BlockInfo {
+    pub storage: BlockStorage,
+    pub events: Vec<WithdrawEvent>,
+}
+
+
+
