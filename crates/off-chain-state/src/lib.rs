@@ -35,13 +35,14 @@ use ethers::types::{Address, U256};
 use ethers::utils::keccak256;
 use ethers::utils::rlp::{decode, encode, Decodable, DecoderError, Encodable, Rlp, RlpStream};
 pub use keccak256_hasher::Keccak256Hasher;
-use primitives::{error::Result, func::address_convert_to_h256, traits::StataTrait};
+use primitives::{error::Result, traits::StataTrait};
 use rocksdb::prelude::Iterate;
 pub use rocksdb::prelude::Open;
 pub use rocksdb::{DBVector, OptimisticTransaction, OptimisticTransactionDB};
 use rocksdb::{Direction, IteratorMode};
 use serde::{Deserialize, Serialize};
 use smt_rocksdb_store::default_store::DefaultStoreMultiTree;
+use sparse_merkle_tree::merge::MergeValue;
 pub use sparse_merkle_tree::traits::Hasher;
 pub use sparse_merkle_tree::{traits::Value, CompiledMerkleProof, SparseMerkleTree, H256};
 use std::fmt::Debug;
@@ -230,6 +231,22 @@ where
             .merkle_proof(keys.clone())?
             .compile(keys)?;
         Ok(proof.0)
+    }
+
+    fn try_get_merkle_proof_1(&self, key: H256) -> Result<(H256, Vec<MergeValue>)> {
+        let snapshot = self.db.snapshot();
+        let rocksdb_store_smt: SparseMerkleTree<
+            H,
+            SmtValue<Data>,
+            DefaultStoreMultiTree<'_, _, ()>,
+        > = DefaultStoreMultiSMT::new_with_store(DefaultStoreMultiTree::<_, ()>::new(
+            self.prefix,
+            &snapshot,
+        ))?;
+        let proof = rocksdb_store_smt.merkle_proof(vec![key])?;
+        let leaves_bitmap = proof.leaves_bitmap()[0];
+        let siblings = proof.merkle_path();
+        Ok((leaves_bitmap, siblings.clone()))
     }
 
     fn try_get_future_root(

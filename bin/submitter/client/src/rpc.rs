@@ -1,13 +1,13 @@
 #![allow(unreachable_patterns)]
 
 use async_trait::async_trait;
-use ethers::types::{Address, U256};
+use ethers::types::{Address, StorageProof, U256};
 use ethers::utils::hex;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{error::ErrorCode, ErrorObject, ErrorObjectOwned};
 use primitives::{constants::*, traits::SubmitterApiServer, types::*};
 use primitives::{error::Error as StateError, func::*, traits::StataTrait};
-use state::{Keccak256Hasher, State, H256};
+use state::{Keccak256Hasher, State, Value, H256};
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
@@ -48,7 +48,12 @@ pub struct SubmitterApiServerImpl<'a> {
 
 #[async_trait]
 impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
-    async fn get_profit_info(&self, address: Address) -> RpcResult<String> {
+    async fn get_profit_info(
+        &self,
+        chain_id: u64,
+        token_id: Address,
+        address: Address,
+    ) -> RpcResult<String> {
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_READ_ERROR_CODE,
@@ -57,7 +62,9 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
             )
         })?;
         let info = state
-            .try_get(address_convert_to_h256(address))
+            .try_get(chain_token_address_convert_to_h256(
+                chain_id, token_id, address,
+            ))
             .map_err(|e| Into::<JsonRpcError>::into(e))?
             .ok_or(ErrorObject::owned(
                 ACCOUNT_NOT_EXISTS_CODE,
@@ -81,7 +88,12 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
         Ok(hex::encode(Into::<[u8; 32]>::into(root)))
     }
 
-    async fn get_proof(&self, address: Address) -> RpcResult<String> {
+    async fn get_profit_proof(
+        &self,
+        chain_id: u64,
+        token_id: Address,
+        address: Address,
+    ) -> RpcResult<ProfitProof<Vec<u32>>> {
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_READ_ERROR_CODE,
@@ -90,13 +102,41 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
             )
         })?;
         let proof = state
-            .try_get_merkle_proof(vec![address_convert_to_h256(address)])
+            .try_get_merkle_proof_1(chain_token_address_convert_to_h256(
+                chain_id, token_id, address,
+            ))
             .map_err(|e| Into::<JsonRpcError>::into(e))?;
-        Ok(hex::encode(proof))
+
+        let info = state
+            .try_get(chain_token_address_convert_to_h256(
+                chain_id, token_id, address,
+            ))
+            .map_err(|e| Into::<JsonRpcError>::into(e))?
+            .ok_or(ErrorObject::owned(
+                ACCOUNT_NOT_EXISTS_CODE,
+                format!("error: account is not in off-chain-state."),
+                None::<bool>,
+            ))?;
+
+        let proof = ProfitProof {
+            path: chain_token_address_convert_to_h256(chain_id, token_id, address).into(),
+            leave_bitmap: proof.0.into(),
+            token: info[0].clone(),
+            siblings: vec![vec![1, 2, 3]],
+        };
+
+        Ok(proof)
+
+        // Ok(hex::encode(proof))
     }
 
-    async fn verify(&self, address: Address, proof: Vec<u8>) -> RpcResult<bool> {
-
+    async fn verify(
+        &self,
+        chain_id: u64,
+        token_id: Address,
+        address: Address,
+        proof: Vec<u8>,
+    ) -> RpcResult<bool> {
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_READ_ERROR_CODE,
@@ -105,7 +145,9 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
             )
         })?;
         let verify = state
-            .try_get_merkle_proof(vec![address_convert_to_h256(address)])
+            .try_get_merkle_proof(vec![chain_token_address_convert_to_h256(
+                chain_id, token_id, address,
+            )])
             .map_err(|e| Into::<JsonRpcError>::into(e))?
             == proof;
         Ok(verify)

@@ -31,4 +31,5 @@ tracing-appender = "0.2.2"
 tracing-subscriber = "0.3.17"
 serde_json = "1.0.105"
 hex = "0.4.3"
+tiny-keccak = "2.0.2"
 
