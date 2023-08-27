@@ -31,10 +31,12 @@ mod tests;
 use bincode;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use byte_slice_cast::AsByteSlice;
+use ethers::abi::{decode, encode, ParamType, Tokenizable, TokenizableItem};
 use ethers::types::{Address, U256};
 use ethers::utils::keccak256;
-use ethers::utils::rlp::{decode, encode, Decodable, DecoderError, Encodable, Rlp, RlpStream};
+// use ethers::utils::rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 pub use keccak256_hasher::Keccak256Hasher;
+use primitives::types::AbiDecode;
 use primitives::{error::Result, traits::StataTrait};
 use rocksdb::prelude::Iterate;
 pub use rocksdb::prelude::Open;
@@ -59,25 +61,26 @@ pub struct SmtValue<Data> {
     serialized_data: Vec<u8>,
 }
 
-impl<Data: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> Default
-    for SmtValue<Data>
+impl<
+        Data: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode,
+    > Default for SmtValue<Data>
 {
     fn default() -> Self {
         SmtValue::new(vec![]).unwrap()
     }
 }
 
-impl<Data: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> SmtValue<Data> {
+impl<
+        Data: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode,
+    > SmtValue<Data>
+{
     pub fn new(datas: Vec<Data>) -> Result<Self> {
-        let mut stream = RlpStream::new();
-        stream.begin_list(datas.len());
-        for d in datas.clone() {
-            stream.append(&d);
-        }
+        let t = datas.clone().into_token();
+        let serialized_data = encode(&vec![t.clone()]);
 
         Ok(SmtValue {
             datas,
-            serialized_data: stream.out().to_vec(),
+            serialized_data: serialized_data.to_vec(),
         })
     }
 
@@ -90,7 +93,9 @@ impl<Data: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> Smt
     }
 }
 
-impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> Value for SmtValue<D> {
+impl<D: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode> Value
+    for SmtValue<D>
+{
     fn to_h256(&self) -> H256 {
         match self {
             // H256::zero() is very important and involves the retention of leaf data.
@@ -104,11 +109,12 @@ impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> Value 
     }
 }
 
-impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> From<DBVector>
-    for SmtValue<D>
+impl<D: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode>
+    From<DBVector> for SmtValue<D>
 {
     fn from(v: DBVector) -> Self {
-        let decode_date = Rlp::new(v.as_ref()).as_list::<D>().unwrap();
+        let t = D::decode(v.to_vec()).unwrap();
+        let decode_date = Vec::<D>::from_token(t[0].clone()).unwrap();
         SmtValue {
             datas: decode_date,
             serialized_data: v.to_vec(),
@@ -116,8 +122,8 @@ impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> From<D
     }
 }
 
-impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> AsRef<[u8]>
-    for SmtValue<D>
+impl<D: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode>
+    AsRef<[u8]> for SmtValue<D>
 {
     fn as_ref(&self) -> &[u8] {
         self.get_serialized_data()
@@ -130,7 +136,7 @@ impl<D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable> AsRef<
 pub struct State<
     'a,
     H: Hasher + Default,
-    D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable,
+    D: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode,
 > {
     prefix: &'a [u8],
     db: OptimisticTransactionDB,
@@ -140,7 +146,7 @@ pub struct State<
 impl<
         'a,
         H: Hasher + Default,
-        D: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable,
+        D: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode,
     > State<'a, H, D>
 {
     pub fn new(prefix: &'a [u8], db: OptimisticTransactionDB) -> Self {
@@ -152,8 +158,10 @@ impl<
     }
 }
 
-impl<H, Data: Debug + Clone + Default + Eq + PartialEq + Encodable + Decodable>
-    StataTrait<H256, Data> for State<'_, H, Data>
+impl<
+        H,
+        Data: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode,
+    > StataTrait<H256, Data> for State<'_, H, Data>
 where
     H: Hasher + Default,
 {

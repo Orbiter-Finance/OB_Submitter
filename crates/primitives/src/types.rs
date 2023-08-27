@@ -1,6 +1,6 @@
-use ethers::abi::{InvalidOutputType, Token, Tokenizable, Tokenize};
+use ethers::abi::{Detokenize, InvalidOutputType, Token, Tokenizable, TokenizableItem, Tokenize};
 use ethers::{
-    abi,
+    abi::{self, decode, encode, Error, ParamType},
     types::{Address, H256, U256},
     utils::rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream},
 };
@@ -23,31 +23,49 @@ pub struct ProfitStateData {
     pub balance: U256,
 }
 
+impl TokenizableItem for ProfitStateData {}
+
+pub trait AbiDecode {
+    fn decode(bytes: Vec<u8>) -> std::result::Result<Vec<Token>, Error>;
+}
+
+impl AbiDecode for ProfitStateData {
+    fn decode(bytes: Vec<u8>) -> std::result::Result<Vec<Token>, Error> {
+        decode(
+            &[ParamType::Array(Box::new(ParamType::Tuple(vec![
+                ParamType::Address,
+                ParamType::Uint(256),
+                ParamType::Uint(256),
+            ])))],
+            &bytes,
+        )
+    }
+}
 impl Tokenizable for ProfitStateData {
     fn from_token(token: Token) -> Result<Self, InvalidOutputType>
     where
         Self: Sized,
     {
         if let Token::Tuple(tuple) = token {
-            if tuple.len() == 4 {
+            if tuple.len() == 3 {
                 let token = tuple[0]
                     .clone()
                     .into_address()
                     .ok_or(InvalidOutputType(format!(
-                        "ProfitStateData from_token error"
+                        "ProfitStateData from_token error: token"
                     )))?; // .into_address()?;
                 let token_chain_id =
                     tuple[1]
                         .clone()
                         .into_uint()
                         .ok_or(InvalidOutputType(format!(
-                            "ProfitStateData from_token error"
+                            "ProfitStateData from_token error: chain_id"
                         )))?;
                 let balance = tuple[2]
                     .clone()
                     .into_uint()
                     .ok_or(InvalidOutputType(format!(
-                        "ProfitStateData from_token error"
+                        "ProfitStateData from_token error:balance"
                     )))?;
 
                 return Ok(ProfitStateData {
@@ -58,7 +76,7 @@ impl Tokenizable for ProfitStateData {
             }
         }
         return Err(InvalidOutputType(format!(
-            "ProfitStateData from_token error"
+            "ProfitStateData from_token error: all"
         )));
     }
 
@@ -71,47 +89,62 @@ impl Tokenizable for ProfitStateData {
     }
 }
 
-impl Encodable for ProfitStateData {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_list(4);
-        s.append(&self.token);
-        s.append(&self.token_chain_id);
-        s.append(&self.balance);
-    }
-}
-
-impl Decodable for ProfitStateData {
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let token = rlp.val_at(0)?;
-        let token_chain_id = rlp.val_at(1)?;
-        let balance = rlp.val_at(2)?;
-        Ok(ProfitStateData {
-            token,
-            token_chain_id,
-            balance,
-        })
-    }
-}
-
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct BlocksStateData {
-    pub root: H256,
-    pub txs: H256,
+    pub root: [u8; 32],
+    pub txs: [u8; 32],
 }
 
-impl Decodable for BlocksStateData {
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let root = rlp.val_at(0)?;
-        let txs = rlp.val_at(1)?;
-        Ok(BlocksStateData { root, txs })
+impl TokenizableItem for BlocksStateData {}
+
+impl Tokenizable for BlocksStateData {
+    fn from_token(token: Token) -> Result<Self, InvalidOutputType>
+    where
+        Self: Sized,
+    {
+        if let Token::Tuple(tuple) = token {
+            if tuple.len() == 2 {
+                let root = tuple[0]
+                    .clone()
+                    .into_fixed_bytes()
+                    .ok_or(InvalidOutputType(format!(
+                        "BlocksStateData from_token error: root"
+                    )))?; // .into_address()?;
+                let txs = tuple[1]
+                    .clone()
+                    .into_fixed_bytes()
+                    .ok_or(InvalidOutputType(format!(
+                        "BlocksStateData from_token error: txs"
+                    )))?;
+
+                return Ok(BlocksStateData {
+                    root: root[..32].to_owned().try_into().unwrap(),
+                    txs: txs[..32].to_owned().try_into().unwrap(),
+                });
+            }
+        }
+        return Err(InvalidOutputType(format!(
+            "BlocksStateData from_token error: all"
+        )));
+    }
+
+    fn into_token(self) -> Token {
+        let mut tuple = Vec::new();
+        tuple.push(Token::FixedBytes(self.root.into()));
+        tuple.push(Token::FixedBytes(self.txs.into()));
+        Token::Tuple(tuple)
     }
 }
 
-impl Encodable for BlocksStateData {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_list(2);
-        s.append(&self.root);
-        s.append(&self.txs);
+impl AbiDecode for BlocksStateData {
+    fn decode(bytes: Vec<u8>) -> std::result::Result<Vec<Token>, Error> {
+        decode(
+            &[ParamType::Array(Box::new(ParamType::Tuple(vec![
+                ParamType::FixedBytes(32),
+                ParamType::FixedBytes(32),
+            ])))],
+            &bytes,
+        )
     }
 }
 
