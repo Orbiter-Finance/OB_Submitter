@@ -5,12 +5,17 @@ use ethers::{
     utils::rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream},
 };
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use sparse_merkle_tree::merge::MergeValue;
+use std::cmp::min;
 use std::sync::atomic::Ordering;
 
+#[serde_as]
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
-pub struct ProfitProof<MergeValue> {
+pub struct ProfitProof {
+    #[serde_as(as = "serde_with::hex::Hex")]
     pub path: [u8; 32],
+    #[serde_as(as = "serde_with::hex::Hex")]
     pub leave_bitmap: [u8; 32],
     pub token: ProfitStateData,
     pub siblings: Vec<MergeValue>,
@@ -21,6 +26,28 @@ pub struct ProfitStateData {
     pub token: Address,
     pub token_chain_id: u64,
     pub balance: U256,
+    pub debt: U256,
+}
+
+pub trait Debt {
+    fn add_balance(&mut self, amount: U256) -> std::result::Result<(), String>;
+    fn sub_balance(&mut self, amount: U256) -> std::result::Result<(), String>;
+}
+
+impl Debt for ProfitStateData {
+    fn add_balance(&mut self, amount: U256) -> std::result::Result<(), String> {
+        let debt = self.debt;
+        let min_debt = min(debt, amount);
+        self.debt = debt.checked_sub(min_debt).ok_or("overflow")?;
+        let amount = amount.checked_sub(min_debt).ok_or("overflow")?;
+        self.balance = self.balance.checked_add(amount).ok_or("overflow")?;
+        Ok(())
+    }
+
+    fn sub_balance(&mut self, amount: U256) -> std::result::Result<(), String> {
+        self.balance = self.balance.checked_sub(amount).ok_or("overflow")?;
+        Ok(())
+    }
 }
 
 impl TokenizableItem for ProfitStateData {}
@@ -47,7 +74,7 @@ impl Tokenizable for ProfitStateData {
         Self: Sized,
     {
         if let Token::Tuple(tuple) = token {
-            if tuple.len() == 3 {
+            if tuple.len() == 4 {
                 let token = tuple[0]
                     .clone()
                     .into_address()
@@ -67,11 +94,18 @@ impl Tokenizable for ProfitStateData {
                     .ok_or(InvalidOutputType(format!(
                         "ProfitStateData from_token error:balance"
                     )))?;
+                let debt = tuple[3]
+                    .clone()
+                    .into_uint()
+                    .ok_or(InvalidOutputType(format!(
+                        "ProfitStateData from_token error:debt"
+                    )))?;
 
                 return Ok(ProfitStateData {
                     token,
                     token_chain_id: token_chain_id.as_u64(),
                     balance,
+                    debt,
                 });
             }
         }
@@ -85,6 +119,7 @@ impl Tokenizable for ProfitStateData {
         tuple.push(Token::Address(self.token));
         tuple.push(Token::Uint(self.token_chain_id.into()));
         tuple.push(Token::Uint(self.balance));
+        tuple.push(Token::Uint(self.debt));
         Token::Tuple(tuple)
     }
 }
@@ -150,12 +185,14 @@ impl AbiDecode for BlocksStateData {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CrossTxData {
+pub struct CrossTxDataAsKey {
+    pub maker_address: String,
     pub dealer_address: String,
     pub profit: String,
     pub source_address: String,
     pub source_amount: String,
     pub source_chain: String,
+    // tx hash
     pub source_id: String,
     pub source_maker: String,
     pub source_symbol: String,
@@ -169,6 +206,13 @@ pub struct CrossTxData {
     pub target_symbol: String,
     pub target_time: u64,
     pub target_token: String,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+pub struct CrossTxProfit {
+    pub maker_address: Address,
+    pub dealer_address: Address,
+    pub profit: U256,
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
@@ -199,8 +243,14 @@ pub struct DepositEvent {
     pub balance: U256,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
+pub enum Event {
+    Deposit(DepositEvent),
+    Withdraw(WithdrawEvent),
+}
+
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct BlockInfo {
     pub storage: BlockStorage,
-    pub events: Vec<WithdrawEvent>,
+    pub events: Vec<Event>,
 }

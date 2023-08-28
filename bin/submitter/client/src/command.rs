@@ -8,4 +8,6 @@ pub struct Args {
     pub rpc_port: u16,
     #[arg(short = 'd', long, default_value_t = String::from("db"), help = "state db's path")]
     pub db_path: String,
+    #[arg(short, long, default_value_t = false, help = "debug mode")]
+    pub debug: bool,
 }

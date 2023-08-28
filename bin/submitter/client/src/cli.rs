@@ -1,4 +1,4 @@
-use super::rpc::SubmitterApiServerImpl;
+use super::rpc::{DebugApiServerImpl, SubmitterApiServerImpl};
 use super::Args;
 use anyhow::Result;
 use clap::Parser;
@@ -12,6 +12,7 @@ use jsonrpsee::{
     Methods,
 };
 use lazy_static::lazy_static;
+use primitives::traits::DebugApiServer;
 use primitives::traits::StataTrait;
 use primitives::{
     traits::SubmitterApiServer,
@@ -27,6 +28,23 @@ use tracing::{event, Level};
 use tracing_appender::rolling::daily;
 use tracing_subscriber::fmt::format;
 use tracing_subscriber::FmtSubscriber;
+
+pub struct JsonRpcServer {
+    pub mothods: Methods,
+}
+
+impl JsonRpcServer {
+    pub fn new() -> Self {
+        JsonRpcServer {
+            mothods: Methods::new(),
+        }
+    }
+
+    pub fn add_mothod(&mut self, mothoes: impl Into<Methods>) -> anyhow::Result<()> {
+        self.mothods.merge(mothoes)?;
+        Ok(())
+    }
+}
 
 pub struct Client<
     Profit: StataTrait<H256, ProfitStateData>,
@@ -72,8 +90,8 @@ pub async fn run() -> Result<()> {
     dotenv().ok();
 
     let args = Args::parse();
-
     let rpc_server_port = args.rpc_port;
+    let mut rpc_server = JsonRpcServer::new();
 
     let file_appender = daily(format!("{}/logs", args.db_path), "submitter.log");
     tracing_subscriber::fmt()
@@ -156,12 +174,23 @@ pub async fn run() -> Result<()> {
         .build(format!("127.0.0.1:{}", client.rpc_server_port))
         .await?;
     let addr = server.local_addr()?;
-    let server_handle = server.start(
+    rpc_server.add_mothod(
         SubmitterApiServerImpl {
-            state: profit_state,
+            state: profit_state.clone(),
         }
         .into_rpc(),
     )?;
+    if args.debug {
+        rpc_server.add_mothod(
+            DebugApiServerImpl {
+                state: profit_state.clone(),
+            }
+            .into_rpc(),
+        )?;
+    }
+
+    let server_handle = server.start(rpc_server.mothods.clone())?;
+
     event!(Level::INFO, "Rpc server start at: {:?}", addr);
     tokio::spawn(server_handle.stopped());
 

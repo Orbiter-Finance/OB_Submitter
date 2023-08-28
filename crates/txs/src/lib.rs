@@ -278,8 +278,43 @@ pub async fn run(
         loop {
             let start_block_info = receiver1.recv().await.unwrap();
             if let Some(block_info) = start_block_info.1 {
-                if is_chill(block_info) {
+                if is_chill(block_info.clone()) {
                     // fixme
+                    // 根据区块获取block info
+                    // 根据区块获取事件range
+                    // 根据时间范围获取交易
+                    // 执行真正的转账操作
+                    // 获取最新的root
+                    // 提交root
+                    let start_block_number = block_info.storage.block_number;
+                    let end_block_number = block_info.storage.block_number;
+                    // 循环每个区块获取数据并处理
+                    for i in start_block_number..=end_block_number {
+                        let block_info = txs_handler3.get_block_info_from_db(i);
+                        if block_info.is_none() {
+                            continue;
+                        }
+                        let block_info = block_info.unwrap();
+                        let timestamp_range = txs_handler3
+                            .get_timestamp_range_by_block_number(block_info.storage.block_number);
+                        if timestamp_range.is_none() {
+                            continue;
+                        }
+                        let timestamp_range = timestamp_range.unwrap();
+                        let txs = txs_handler3.get_txs_from_db(timestamp_range.0, timestamp_range.1);
+                        // if txs.is_none() {
+                        //     continue;
+                        // }
+                        // let txs = txs.unwrap();
+                        // for tx in txs {
+                        //     // fixme
+                        //     // 执行真正的转账操作
+                        //     // 获取最新的root
+                        //     // 提交root
+                        // }
+
+                    }
+
                 }
             }
         }

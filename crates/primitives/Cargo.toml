@@ -19,3 +19,4 @@ blake2b = "0.99.0"
 blake2b-rs = "0.2.0"
 async-trait = "0.1.73"
 tiny-keccak = "2.0.2"
+serde_with = { version = "3.3.0", features = ["hex"] }

@@ -1,4 +1,4 @@
-use crate::types::{BlockInfo, ProfitProof};
+use crate::types::{BlockInfo, ProfitProof, ProfitStateData};
 use async_trait::async_trait;
 use ethers::types::{Address, U256};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
@@ -6,25 +6,42 @@ use sparse_merkle_tree::{merge::MergeValue, H256};
 use std::result::Result as StdResult;
 // local
 use super::error::Result;
-// The rpc interface provided to the user externally.
-#[rpc(server, namespace = "submitter")]
-pub trait SubmitterApi {
-    #[method(name = "getBalance")]
-    async fn get_profit_info(
+
+#[rpc(server, namespace = "debug")]
+pub trait DebugApi {
+    #[method(name = "clear_state")]
+    async fn clear_state(&self) -> RpcResult<()>;
+    #[method(name = "update_profit")]
+    async fn update_profit(
         &self,
         chain_id: u64,
         token_id: Address,
         address: Address,
-    ) -> RpcResult<String>;
+        amount: U256,
+    ) -> RpcResult<H256>;
+}
+
+// The rpc interface provided to the user externally.
+#[rpc(server, namespace = "submitter")]
+pub trait SubmitterApi {
+    #[method(name = "getProfitInfo")]
+    async fn get_profit_info(
+        &self,
+        user: Address,
+        tokens: Vec<(u64, Address)>,
+    ) -> RpcResult<Vec<ProfitStateData>>;
+
+    // #[method(name = "getAllProfitInfo")]
+    // async fn get_all_profit_info(&self, address: Address) -> RpcResult<Vec<ProfitStateData>>;
+
     #[method(name = "getRoot")]
     async fn get_root(&self) -> RpcResult<String>;
     #[method(name = "getProfitProof")]
     async fn get_profit_proof(
         &self,
-        chain_id: u64,
-        token_id: Address,
-        address: Address,
-    ) -> RpcResult<ProfitProof<Vec<u32>>>;
+        user: Address,
+        tokens: Vec<(u64, Address)>,
+    ) -> RpcResult<Vec<ProfitProof>>;
     #[method(name = "verify")]
     async fn verify(
         &self,
@@ -66,6 +83,6 @@ pub trait Contract {
     async fn get_maker_commission_by_block(
         &self,
         maker: Address,
-        block_number: u32,
+        block_number: u64,
     ) -> StdResult<u32, String>;
 }
