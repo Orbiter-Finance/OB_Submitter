@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sparse-merkle-tree = "0.6.1"
+sparse-merkle-tree =  { git = "https://github.com/YanOctavian/sparse-merkle-tree.git"}
 blake2b-rs = "0.2.0"
-smt-rocksdb-store = { git = "https://github.com/quake/smt-rocksdb-store.git", branch= "master" }
+smt-rocksdb-store = { git = "https://github.com/YanOctavian/smt-rocksdb-store.git", branch= "master" }
 ethers.workspace = true
 primitives = { path = "../primitives" }
 rocksdb = { package = "ckb-rocksdb", version = "0.19", default-features = false, features = ["snappy", "march-native"] }

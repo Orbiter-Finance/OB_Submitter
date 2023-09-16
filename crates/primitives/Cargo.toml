@@ -8,11 +8,11 @@ edition = "2021"
 [dependencies]
 ethers.workspace = true
 rocksdb = { package = "ckb-rocksdb", version = "0.19", default-features = false, features = ["snappy", "march-native"] }
-smt-rocksdb-store = { git = "https://github.com/quake/smt-rocksdb-store.git", branch= "master" }
+smt-rocksdb-store = { git = "https://github.com/YanOctavian/smt-rocksdb-store.git", branch= "master" }
 jsonrpsee = { version = "0.18.2", features = ["server", "macros", "client"] }
 serde = "1.0.183"
 serde_json = "1.0.105"
-sparse-merkle-tree = "0.6.1"
+sparse-merkle-tree =  { git = "https://github.com/YanOctavian/sparse-merkle-tree.git"}
 thiserror = "1.0.47"
 bincode = "1.3.3"
 blake2b = "0.99.0"
@@ -20,3 +20,8 @@ blake2b-rs = "0.2.0"
 async-trait = "0.1.73"
 tiny-keccak = "2.0.2"
 serde_with = { version = "3.3.0", features = ["hex"] }
+hex = "0.4.3"
+sled = "0.34.7"
+tokio.workspace = true
+ethers-providers = "2.0.9"
+#off-chain-state = { path = "../off-chain-state"}

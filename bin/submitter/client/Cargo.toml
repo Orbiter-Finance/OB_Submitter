@@ -16,14 +16,13 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = "1.0.72"
 async-trait = "0.1"
+sled = "0.34.7"
 clap = { version = "4.3.21", features = ["derive"] }
 clokwerk = "0.4.0"
 dialoguer = "0.10.4"
 dotenv = "0.15.0"
 jsonrpsee = { version = "0.18.2", features = ["server", "macros", "client"] }
 ethers.workspace = true
-state = { path = "../../../crates/off-chain-state", package = "off-chain-state" }
-primitives = { path = "../../../crates/primitives"}
 tokio.workspace = true
 lazy_static = "1.4.0"
 tracing.workspace = true
@@ -32,5 +31,12 @@ tracing-subscriber = "0.3.17"
 serde_json = "1.0.105"
 hex = "0.4.3"
 tiny-keccak = "2.0.2"
-sparse-merkle-tree = "0.6.1"
+sparse-merkle-tree =  { git = "https://github.com/YanOctavian/sparse-merkle-tree.git"}
+thiserror = "1.0.47"
+# local
+state = { path = "../../../crates/off-chain-state", package = "off-chain-state" }
+primitives = { path = "../../../crates/primitives"}
+contract = { path = "../../../crates/contract"}
+txs = {path = "../../../crates/txs"}
+utils = {path = "../../../crates/utils"}
 

@@ -18,37 +18,31 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-// todo list
-// 1. Modify the Data structure.
-// 2. The scheduler regularly updates the data for the state.
-// 4. Create a Merkle tree for all blocks, and the value of the leaf is the income Merkle root of this block so far.
-
 // mod tests;
 pub mod data_example;
-mod keccak256_hasher;
 mod tests;
 
 use bincode;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use byte_slice_cast::AsByteSlice;
-use ethers::abi::{decode, encode, ParamType, Tokenizable, TokenizableItem};
-use ethers::types::{Address, U256};
-use ethers::utils::keccak256;
+use ethers::{
+    abi::{decode, encode, ParamType, Tokenizable, TokenizableItem},
+    types::{Address, U256},
+    utils::keccak256,
+};
 // use ethers::utils::rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
-pub use keccak256_hasher::Keccak256Hasher;
-use primitives::types::AbiDecode;
-use primitives::{error::Result, traits::StataTrait};
-use rocksdb::prelude::Iterate;
-pub use rocksdb::prelude::Open;
-pub use rocksdb::{DBVector, OptimisticTransaction, OptimisticTransactionDB};
-use rocksdb::{Direction, IteratorMode};
+pub use primitives::keccak256_hasher::Keccak256Hasher;
+use primitives::{error::Result, traits::StataTrait, types::AbiDecode};
+use rocksdb::{prelude::Iterate, Direction, IteratorMode};
+pub use rocksdb::{prelude::Open, DBVector, OptimisticTransaction, OptimisticTransactionDB};
 use serde::{Deserialize, Serialize};
 use smt_rocksdb_store::default_store::DefaultStoreMultiTree;
 use sparse_merkle_tree::merge::MergeValue;
-pub use sparse_merkle_tree::traits::Hasher;
-pub use sparse_merkle_tree::{traits::Value, CompiledMerkleProof, SparseMerkleTree, H256};
-use std::fmt::Debug;
-use std::marker::PhantomData;
+pub use sparse_merkle_tree::{
+    traits::{Hasher, Value},
+    CompiledMerkleProof, SparseMerkleTree, H256,
+};
+use std::{fmt::Debug, marker::PhantomData};
 use thiserror::Error;
 
 type DefaultStoreMultiSMT<'a, H, T, W, Data> =
@@ -57,7 +51,7 @@ type DefaultStoreMultiSMT<'a, H, T, W, Data> =
 /// The value stored in the sparse Merkle tree.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SmtValue<Data> {
-    datas: Vec<Data>,
+    data: Data,
     serialized_data: Vec<u8>,
 }
 
@@ -66,7 +60,7 @@ impl<
     > Default for SmtValue<Data>
 {
     fn default() -> Self {
-        SmtValue::new(vec![]).unwrap()
+        SmtValue::new(Data::default()).unwrap()
     }
 }
 
@@ -74,18 +68,18 @@ impl<
         Data: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable + AbiDecode,
     > SmtValue<Data>
 {
-    pub fn new(datas: Vec<Data>) -> Result<Self> {
-        let t = datas.clone().into_token();
+    pub fn new(data: Data) -> Result<Self> {
+        let t = data.clone().into_token();
         let serialized_data = encode(&vec![t.clone()]);
 
         Ok(SmtValue {
-            datas,
+            data,
             serialized_data: serialized_data.to_vec(),
         })
     }
 
-    pub fn get_datas(&self) -> Vec<Data> {
-        self.datas.clone()
+    pub fn get_data(&self) -> Data {
+        self.data.clone()
     }
 
     pub fn get_serialized_data(&self) -> &[u8] {
@@ -114,9 +108,9 @@ impl<D: Debug + Clone + Default + Eq + PartialEq + TokenizableItem + Tokenizable
 {
     fn from(v: DBVector) -> Self {
         let t = D::decode(v.to_vec()).unwrap();
-        let decode_date = Vec::<D>::from_token(t[0].clone()).unwrap();
+        let decode_date = D::from_token(t[0].clone()).unwrap();
         SmtValue {
-            datas: decode_date,
+            data: decode_date,
             serialized_data: v.to_vec(),
         }
     }
@@ -165,7 +159,7 @@ impl<
 where
     H: Hasher + Default,
 {
-    fn try_update_all(&mut self, future_k_v: Vec<(H256, Vec<Data>)>) -> Result<H256> {
+    fn try_update_all(&mut self, future_k_v: Vec<(H256, Data)>) -> Result<H256> {
         let kvs = future_k_v
             .into_iter()
             .map(|(k, v)| match SmtValue::new(v) {
@@ -218,8 +212,6 @@ where
         println!("clear kvs: {:?}", kvs);
         rocksdb_store_smt.update_all(kvs)?;
         tx.commit()?;
-        #[cfg(test)]
-        println!("root1: {:?}", self.try_get_root().unwrap());
 
         assert_eq!(rocksdb_store_smt.root(), &H256::zero());
         Ok(())
@@ -235,9 +227,8 @@ where
             self.prefix,
             &snapshot,
         ))?;
-        let proof = rocksdb_store_smt
-            .merkle_proof(keys.clone())?
-            .compile(keys)?;
+        let proof = rocksdb_store_smt.merkle_proof(keys.clone()).unwrap();
+        let proof = proof.compile(keys)?;
         Ok(proof.0)
     }
 
@@ -252,15 +243,16 @@ where
             &snapshot,
         ))?;
         let proof = rocksdb_store_smt.merkle_proof(vec![key])?;
-        let leaves_bitmap = proof.leaves_bitmap()[0];
+        let leaves_bitmap = proof.leaves_bitmap();
+        let leave_bitmap = leaves_bitmap[0];
         let siblings = proof.merkle_path();
-        Ok((leaves_bitmap, siblings.clone()))
+        Ok((leave_bitmap, siblings.clone()))
     }
 
     fn try_get_future_root(
         &self,
         old_proof: Vec<u8>,
-        future_k_v: Vec<(H256, Vec<Data>)>,
+        future_k_v: Vec<(H256, Data)>,
     ) -> Result<H256> {
         let p = CompiledMerkleProof(old_proof);
         let kvs = future_k_v
@@ -275,7 +267,7 @@ where
         Ok(f_root)
     }
 
-    fn try_get(&self, key: H256) -> Result<Option<Vec<Data>>> {
+    fn try_get(&self, key: H256) -> Result<Data> {
         let snapshot = self.db.snapshot();
         let rocksdb_store_smt: SparseMerkleTree<
             H,
@@ -286,8 +278,8 @@ where
             &snapshot,
         ))?;
         let v = rocksdb_store_smt.get(&key)?;
-        let data = v.get_datas();
-        Ok(Some(data.clone()))
+        let data = v.get_data();
+        Ok(data.clone())
     }
 
     fn try_get_root(&self) -> Result<H256> {

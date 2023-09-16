@@ -1,10 +1,11 @@
-use ethers::types::{Address, U256};
-use ethers::utils::{
-    keccak256,
-    rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream},
+use ethers::{
+    types::{Address, U256},
+    utils::{
+        keccak256,
+        rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream},
+    },
 };
 
-// Serialize, Deserialize
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct Data {
     pub address: Address,

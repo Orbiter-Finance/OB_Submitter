@@ -1,17 +1,22 @@
-use ethers::abi::{Detokenize, InvalidOutputType, Token, Tokenizable, TokenizableItem, Tokenize};
+#![allow(unused_imports)]
+
+use crate::keccak256_hasher;
 use ethers::{
-    abi::{self, decode, encode, Error, ParamType},
-    types::{Address, H256, U256},
+    abi::{
+        self, decode, encode, Detokenize, Error, InvalidOutputType, ParamType, Token, Tokenizable,
+        TokenizableItem, Tokenize,
+    },
+    types::{Address, U256},
     utils::rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream},
 };
+use keccak256_hasher::Keccak256Hasher;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use sparse_merkle_tree::merge::MergeValue;
-use std::cmp::min;
-use std::sync::atomic::Ordering;
+use sparse_merkle_tree::{h256::H256, merge::MergeValue, traits::Hasher};
+use std::{cmp::min, str::FromStr, sync::atomic::Ordering};
 
 #[serde_as]
-#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct ProfitProof {
     #[serde_as(as = "serde_with::hex::Hex")]
     pub path: [u8; 32],
@@ -19,6 +24,9 @@ pub struct ProfitProof {
     pub leave_bitmap: [u8; 32],
     pub token: ProfitStateData,
     pub siblings: Vec<MergeValue>,
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub root: [u8; 32],
+    pub no1_merge_value: (u8, H256),
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
@@ -29,6 +37,15 @@ pub struct ProfitStateData {
     pub debt: U256,
 }
 
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+pub struct ProfitStateDataForRpc {
+    pub token: Address,
+    pub token_chain_id: u64,
+    pub balance: U256,
+    pub debt: U256,
+    pub total_profit: U256,
+    pub total_withdrawn: U256,
+}
 pub trait Debt {
     fn add_balance(&mut self, amount: U256) -> std::result::Result<(), String>;
     fn sub_balance(&mut self, amount: U256) -> std::result::Result<(), String>;
@@ -45,7 +62,9 @@ impl Debt for ProfitStateData {
     }
 
     fn sub_balance(&mut self, amount: U256) -> std::result::Result<(), String> {
-        self.balance = self.balance.checked_sub(amount).ok_or("overflow")?;
+        let min_amount = min(amount, self.balance);
+        self.balance = self.balance.checked_sub(min_amount).ok_or("overflow")?;
+        self.debt = self.debt + (amount - min_amount);
         Ok(())
     }
 }
@@ -59,15 +78,17 @@ pub trait AbiDecode {
 impl AbiDecode for ProfitStateData {
     fn decode(bytes: Vec<u8>) -> std::result::Result<Vec<Token>, Error> {
         decode(
-            &[ParamType::Array(Box::new(ParamType::Tuple(vec![
+            &vec![ParamType::Tuple(vec![
                 ParamType::Address,
+                ParamType::Uint(64),
                 ParamType::Uint(256),
                 ParamType::Uint(256),
-            ])))],
+            ])],
             &bytes,
         )
     }
 }
+
 impl Tokenizable for ProfitStateData {
     fn from_token(token: Token) -> Result<Self, InvalidOutputType>
     where
@@ -80,7 +101,7 @@ impl Tokenizable for ProfitStateData {
                     .into_address()
                     .ok_or(InvalidOutputType(format!(
                         "ProfitStateData from_token error: token"
-                    )))?; // .into_address()?;
+                    )))?;
                 let token_chain_id =
                     tuple[1]
                         .clone()
@@ -126,8 +147,22 @@ impl Tokenizable for ProfitStateData {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct BlocksStateData {
+    pub block_num: u64,
     pub root: [u8; 32],
     pub txs: [u8; 32],
+}
+
+pub trait Chain {
+    fn into_chain(&mut self, old_block: BlocksStateData);
+}
+
+impl Chain for BlocksStateData {
+    fn into_chain(&mut self, old_block: BlocksStateData) {
+        let mut hasher = Keccak256Hasher::default();
+        hasher.write_h256(&H256::from(old_block.root));
+        hasher.write_h256(&H256::from(self.txs.clone()));
+        self.root = hasher.finish().into();
+    }
 }
 
 impl TokenizableItem for BlocksStateData {}
@@ -138,14 +173,20 @@ impl Tokenizable for BlocksStateData {
         Self: Sized,
     {
         if let Token::Tuple(tuple) = token {
-            if tuple.len() == 2 {
-                let root = tuple[0]
+            if tuple.len() == 3 {
+                let block_num = tuple[0]
+                    .clone()
+                    .into_uint()
+                    .ok_or(InvalidOutputType(format!(
+                        "BlocksStateData from_token error: block_num"
+                    )))?;
+                let root = tuple[1]
                     .clone()
                     .into_fixed_bytes()
                     .ok_or(InvalidOutputType(format!(
                         "BlocksStateData from_token error: root"
-                    )))?; // .into_address()?;
-                let txs = tuple[1]
+                    )))?;
+                let txs = tuple[2]
                     .clone()
                     .into_fixed_bytes()
                     .ok_or(InvalidOutputType(format!(
@@ -153,6 +194,7 @@ impl Tokenizable for BlocksStateData {
                     )))?;
 
                 return Ok(BlocksStateData {
+                    block_num: block_num.as_u64(),
                     root: root[..32].to_owned().try_into().unwrap(),
                     txs: txs[..32].to_owned().try_into().unwrap(),
                 });
@@ -165,6 +207,7 @@ impl Tokenizable for BlocksStateData {
 
     fn into_token(self) -> Token {
         let mut tuple = Vec::new();
+        tuple.push(Token::Uint(self.block_num.into()));
         tuple.push(Token::FixedBytes(self.root.into()));
         tuple.push(Token::FixedBytes(self.txs.into()));
         Token::Tuple(tuple)
@@ -174,10 +217,11 @@ impl Tokenizable for BlocksStateData {
 impl AbiDecode for BlocksStateData {
     fn decode(bytes: Vec<u8>) -> std::result::Result<Vec<Token>, Error> {
         decode(
-            &[ParamType::Array(Box::new(ParamType::Tuple(vec![
+            &vec![ParamType::Tuple(vec![
+                ParamType::Uint(64),
                 ParamType::FixedBytes(32),
                 ParamType::FixedBytes(32),
-            ])))],
+            ])],
             &bytes,
         )
     }
@@ -185,27 +229,93 @@ impl AbiDecode for BlocksStateData {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CrossTxDataAsKey {
-    pub maker_address: String,
+pub struct CrossTxData {
+    pub dealer_address: Address,
+    pub profit: U256,
+
+    pub source_address: Address,
+    pub source_amount: String,
+    pub source_chain: u64,
+    // tx_hash
+    pub source_id: String,
+    pub source_maker: Address,
+    pub source_symbol: String,
+    pub source_time: u64,
+    // token id
+    pub source_token: Address,
+
+    pub target_address: Address,
+    pub target_amount: String,
+    pub target_chain: u64,
+    // tx_hash
+    pub target_id: H256,
+    pub target_maker: Option<Address>,
+    pub target_symbol: String,
+    pub target_time: u64,
+    pub target_token: Address,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrossTxRawData {
     pub dealer_address: String,
-    pub profit: String,
+
+    // token
     pub source_address: String,
     pub source_amount: String,
     pub source_chain: String,
     // tx hash
     pub source_id: String,
+    //
     pub source_maker: String,
     pub source_symbol: String,
     pub source_time: u64,
     pub source_token: String,
+    // maker address
     pub target_address: String,
     pub target_amount: String,
     pub target_chain: String,
+    // tx_hash
     pub target_id: String,
-    pub target_maker: String,
+    pub target_maker: Option<String>,
     pub target_symbol: String,
     pub target_time: u64,
     pub target_token: String,
+
+    pub trade_fee: String,
+    pub trade_fee_decimals: u8,
+    pub withholding_fee: String,
+    pub withholding_fee_decimals: u8,
+}
+
+impl From<CrossTxRawData> for CrossTxData {
+    fn from(value: CrossTxRawData) -> Self {
+        let target_id_string = value.target_id.clone();
+        let target_id: [u8; 32] = hex::decode(&target_id_string[2..66])
+            .unwrap()
+            .try_into()
+            .unwrap();
+        CrossTxData {
+            dealer_address: Address::from_str(&value.dealer_address).unwrap(),
+            profit: U256::from_dec_str(&value.trade_fee).unwrap(),
+            source_address: value.source_address.parse().unwrap(),
+            source_amount: value.source_amount,
+            source_chain: value.source_chain.parse().unwrap(),
+            source_id: value.source_id,
+            source_maker: Address::from_str(&value.source_maker).unwrap(),
+            source_symbol: value.source_symbol,
+            source_time: value.source_time,
+            source_token: Address::from_str(&value.source_token).unwrap(),
+            target_address: Address::from_str(&value.target_address).unwrap(),
+            target_amount: value.target_amount,
+            target_chain: value.target_chain.parse().unwrap(),
+            target_id: target_id.into(),
+            target_maker: None,
+            target_symbol: value.target_symbol,
+            target_time: value.target_time,
+            target_token: Address::from_str(&value.target_token).unwrap(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
@@ -213,18 +323,31 @@ pub struct CrossTxProfit {
     pub maker_address: Address,
     pub dealer_address: Address,
     pub profit: U256,
+    pub chain_id: u64,
+    pub token: Address,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
+pub enum FeeManagerDuration {
+    Lock,
+    Challenge,
+    Withdraw,
+}
+
+impl Default for FeeManagerDuration {
+    fn default() -> Self {
+        Self::Lock
+    }
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct BlockStorage {
-    pub chill_duration: u64,
-    pub challenge_duration: u64,
-    pub withdraw_duration: u64,
+    pub duration: FeeManagerDuration,
     pub last_update_block: u64,
     pub last_submit_timestamp: u64,
-    pub support_chains: Vec<(u64, u64)>,
     pub block_timestamp: u64,
     pub block_number: u64,
+    pub profit_root: [u8; 32],
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
@@ -253,4 +376,11 @@ pub enum Event {
 pub struct BlockInfo {
     pub storage: BlockStorage,
     pub events: Vec<Event>,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+pub struct ProfitStatistics {
+    pub total_profit: U256,
+    pub total_withdrawn: U256,
+    pub total_deposit: U256,
 }

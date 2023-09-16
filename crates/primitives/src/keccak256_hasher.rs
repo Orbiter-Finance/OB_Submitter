@@ -1,9 +1,10 @@
+#![allow(unused_imports)]
+
 use ethers::utils::keccak256;
 use sparse_merkle_tree::{traits::Hasher, H256};
-use tiny_keccak::Hasher as KeccakHasher;
-use tiny_keccak::Keccak;
+use tiny_keccak::{Hasher as KeccakHasher, Keccak};
 
-pub struct Keccak256Hasher(Keccak);
+pub struct Keccak256Hasher(pub Keccak);
 
 impl Default for Keccak256Hasher {
     fn default() -> Self {

@@ -1,4 +1,6 @@
-use crate::types::{BlockInfo, ProfitProof, ProfitStateData};
+use crate::types::{
+    BlockInfo, BlockStorage, Event, ProfitProof, ProfitStateData, ProfitStateDataForRpc,
+};
 use async_trait::async_trait;
 use ethers::types::{Address, U256};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
@@ -9,16 +11,12 @@ use super::error::Result;
 
 #[rpc(server, namespace = "debug")]
 pub trait DebugApi {
-    #[method(name = "clear_state")]
+    #[method(name = "clearState")]
     async fn clear_state(&self) -> RpcResult<()>;
-    #[method(name = "update_profit")]
-    async fn update_profit(
-        &self,
-        chain_id: u64,
-        token_id: Address,
-        address: Address,
-        amount: U256,
-    ) -> RpcResult<H256>;
+    #[method(name = "updateProfit")]
+    async fn update_profit(&self, user: Address, profit: ProfitStateData) -> RpcResult<H256>;
+    #[method(name = "updateProfitByCount")]
+    async fn update_profit_by_count(&self, count: u64) -> RpcResult<H256>;
 }
 
 // The rpc interface provided to the user externally.
@@ -29,10 +27,10 @@ pub trait SubmitterApi {
         &self,
         user: Address,
         tokens: Vec<(u64, Address)>,
-    ) -> RpcResult<Vec<ProfitStateData>>;
+    ) -> RpcResult<Vec<ProfitStateDataForRpc>>;
 
-    // #[method(name = "getAllProfitInfo")]
-    // async fn get_all_profit_info(&self, address: Address) -> RpcResult<Vec<ProfitStateData>>;
+    #[method(name = "getAllProfitInfo")]
+    async fn get_all_profit_info(&self, address: Address) -> RpcResult<Vec<ProfitStateDataForRpc>>;
 
     #[method(name = "getRoot")]
     async fn get_root(&self) -> RpcResult<String>;
@@ -55,17 +53,16 @@ pub trait SubmitterApi {
 /// Several basic implementations of off-chain state.
 pub trait StataTrait<K, V> {
     /// Batch to update kvs, and return the new root.
-    fn try_update_all(&mut self, future_k_v: Vec<(K, Vec<V>)>) -> Result<H256>;
+    fn try_update_all(&mut self, future_k_v: Vec<(K, V)>) -> Result<H256>;
     /// clear all data.
     fn try_clear(&mut self) -> Result<()>;
     /// get current merkle proof.
     fn try_get_merkle_proof(&self, keys: Vec<K>) -> Result<Vec<u8>>;
     fn try_get_merkle_proof_1(&self, key: K) -> Result<(H256, Vec<MergeValue>)>;
     /// get the future root without changing the state.
-    fn try_get_future_root(&self, old_proof: Vec<u8>, future_k_v: Vec<(K, Vec<V>)>)
-        -> Result<H256>;
+    fn try_get_future_root(&self, old_proof: Vec<u8>, future_k_v: Vec<(K, V)>) -> Result<H256>;
     /// get value by key.
-    fn try_get(&self, key: K) -> Result<Option<Vec<V>>>;
+    fn try_get(&self, key: K) -> Result<V>;
     /// get current merkle root.
     fn try_get_root(&self) -> Result<H256>;
 }
@@ -76,13 +73,22 @@ pub trait Contract {
         &self,
         start: u64,
         end: u64,
-        blocks_root: [u8; 32],
         root: [u8; 32],
-    ) -> StdResult<(), String>;
-    async fn get_block_info(&self, block_number: u64) -> StdResult<BlockInfo, String>;
-    async fn get_maker_commission_by_block(
+        blocks_root: [u8; 32],
+    ) -> Result<ethers::types::H256>;
+    async fn get_block_info(&self, block_number: u64) -> Result<Option<BlockInfo>>;
+    async fn get_block_storage(&self, block_number: u64) -> Result<Option<BlockStorage>>;
+    async fn get_feemanager_contract_events(&self, block_number: u64) -> Result<Vec<Event>>;
+    async fn get_erc20_transfer_events_by_tokens_id(
+        &self,
+        tokens: Vec<Address>,
+        block_number: u64,
+    ) -> Result<Vec<Event>>;
+    async fn get_maker_profit_percent_by_block(
         &self,
         maker: Address,
         block_number: u64,
-    ) -> StdResult<u32, String>;
+        token_chian_id: u64,
+        token_id: Address,
+    ) -> Result<u64>;
 }

@@ -1,33 +1,38 @@
-use super::rpc::{DebugApiServerImpl, SubmitterApiServerImpl};
-use super::Args;
+use super::{
+    rpc::{DebugApiServerImpl, SubmitterApiServerImpl},
+    Args,
+};
 use anyhow::Result;
 use clap::Parser;
 use clokwerk::{Scheduler, TimeUnits};
+use contract::{run as contract_run, SubmitterContract};
 use dialoguer::Password;
 use dotenv::dotenv;
-use ethers::prelude::*;
-use ethers::signers::LocalWallet;
+use ethers::{prelude::*, signers::LocalWallet};
 use jsonrpsee::{
     server::{Server, ServerBuilder, ServerHandle},
     Methods,
 };
 use lazy_static::lazy_static;
-use primitives::traits::DebugApiServer;
-use primitives::traits::StataTrait;
 use primitives::{
-    traits::SubmitterApiServer,
-    types::{BlocksStateData, ProfitStateData},
+    func::chain_token_address_convert_to_h256,
+    traits::{DebugApiServer, StataTrait, SubmitterApiServer},
+    types::{BlockInfo, BlocksStateData, ProfitStateData},
 };
-use state::data_example::Data as DataExample;
-use state::{Keccak256Hasher, Open, OptimisticTransactionDB, State, H256};
-use std::env;
-use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock};
+use sled;
+use state::{
+    data_example::Data as DataExample, Keccak256Hasher, Open, OptimisticTransactionDB, State, H256,
+};
+use std::{
+    env,
+    str::FromStr,
+    sync::{Arc, Mutex, RwLock},
+};
 use tokio::sync::OnceCell;
 use tracing::{event, Level};
 use tracing_appender::rolling::daily;
-use tracing_subscriber::fmt::format;
-use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::{fmt::format, FmtSubscriber};
+use txs::{funcs::SupportChains, Submitter};
 
 pub struct JsonRpcServer {
     pub mothods: Methods,
@@ -66,14 +71,12 @@ impl<'a>
 {
     pub fn new(
         wallet: Arc<LocalWallet>,
-        // provider: Arc<Provider<Http>>,
         rpc_server_port: u16,
         profit_state: Arc<RwLock<State<'a, Keccak256Hasher, ProfitStateData>>>,
         blocks_state: Arc<RwLock<State<'a, Keccak256Hasher, BlocksStateData>>>,
     ) -> Self {
         Client {
             wallet,
-            // provider,
             rpc_server_port,
             profit_state,
             blocks_state,
@@ -96,7 +99,7 @@ pub async fn run() -> Result<()> {
     let file_appender = daily(format!("{}/logs", args.db_path), "submitter.log");
     tracing_subscriber::fmt()
         .with_writer(file_appender)
-        .with_max_level(Level::TRACE)
+        .with_max_level(Level::INFO)
         .init();
     event!(
         Level::INFO,
@@ -109,16 +112,14 @@ pub async fn run() -> Result<()> {
 
     PROFIT_STATE_DB_PATH.set(profit_state_db_path).unwrap();
     BLOCKS_STATE_DB_PATH.set(blocks_state_db_path).unwrap();
-    assert!(
+    assert_ne!(
         PROFIT_STATE_DB_PATH
             .get()
-            .expect("profit state db' path not set")
-            != BLOCKS_STATE_DB_PATH
-                .get()
-                .expect("blocks state db' path not set"),
-        "profit db's path and blocks db's path can't be the same"
+            .expect("profit state db' path not set"),
+        BLOCKS_STATE_DB_PATH
+            .get()
+            .expect("blocks state db' path not set"),
     );
-    // for example: 0x0123456789012345678901234567890123456789012345678901234567890123
     let private_key = Password::new()
         .with_prompt("Please enter submitter's private key")
         .interact()?;
@@ -158,12 +159,12 @@ pub async fn run() -> Result<()> {
     ));
     event!(
         Level::INFO,
-        "Blocks state's db is created! path is: {:?}",
+        "Blocks state's db is created! path: {:?}",
         BLOCKS_STATE_DB_PATH.get().unwrap()
     );
 
     let client = Client::new(
-        wallet,
+        wallet.clone(),
         rpc_server_port,
         profit_state.clone(),
         blocks_state.clone(),
@@ -174,9 +175,15 @@ pub async fn run() -> Result<()> {
         .build(format!("127.0.0.1:{}", client.rpc_server_port))
         .await?;
     let addr = server.local_addr()?;
+    let sled_db = Arc::new(sled::open(args.db_path.clone()).unwrap());
+    let user_tokens_db = Arc::new(txs::sled_db::UserTokensDB::new(sled_db.clone()).unwrap());
+    let profit_statistics_db =
+        Arc::new(txs::sled_db::ProfitStatisticsDB::new(sled_db.clone()).unwrap());
     rpc_server.add_mothod(
         SubmitterApiServerImpl {
             state: profit_state.clone(),
+            user_tokens_db: user_tokens_db.clone(),
+            profit_statistics_db: profit_statistics_db.clone(),
         }
         .into_rpc(),
     )?;
@@ -184,30 +191,85 @@ pub async fn run() -> Result<()> {
         rpc_server.add_mothod(
             DebugApiServerImpl {
                 state: profit_state.clone(),
+                user_tokens_db: user_tokens_db.clone(),
             }
             .into_rpc(),
         )?;
+        tokio::spawn(insert_profit_by_count(100_0000, profit_state.clone()));
     }
 
     let server_handle = server.start(rpc_server.mothods.clone())?;
 
     event!(Level::INFO, "Rpc server start at: {:?}", addr);
     tokio::spawn(server_handle.stopped());
-
-    let mut scheduler = Scheduler::new();
-    scheduler.every(10.seconds()).run(|| {
-        // todo
-        event!(Level::INFO, "hello world!");
+    let start_block_num1 = Arc::new(tokio::sync::RwLock::new(args.start_block));
+    let (s, r) = tokio::sync::broadcast::channel::<BlockInfo>(100);
+    let support_chains_crawler = SupportChains::new(
+        std::env::var("SUPPORT_CHAINS_SOURCE_URL").expect("SUPPORT_CHAINS_SOURCE_URL is not set"),
+    );
+    let tokens: Arc<Vec<Address>> =
+        Arc::new(support_chains_crawler.get_mainnet_support_tokens().await?);
+    let contract = Arc::new(
+        SubmitterContract::new(
+            s.clone(),
+            wallet.as_ref().clone(),
+            start_block_num1.clone(),
+            tokens,
+        )
+        .await,
+    );
+    let c_1 = contract.clone();
+    tokio::spawn(async {
+        contract_run(c_1).await.unwrap();
+        event!(Level::INFO, "contract start");
     });
+
+    let start_block_num = Arc::new(RwLock::new(args.start_block));
+    let submitter = Submitter::new(
+        profit_state.clone(),
+        blocks_state.clone(),
+        contract.clone(),
+        start_block_num.clone(),
+        sled_db.clone(),
+        args.db_path,
+    );
     tokio::spawn(async move {
-        event!(Level::INFO, "Start the scheduled task.");
-        loop {
-            scheduler.run_pending();
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        }
-        // todo Regularly update data for state.
+        submitter.run().await.unwrap();
     });
-
+    s.send(BlockInfo {
+        storage: Default::default(),
+        events: vec![],
+    })
+    .unwrap();
     std::future::pending::<()>().await;
     Ok(())
+}
+
+async fn insert_profit_by_count(
+    count: u64,
+    state: Arc<RwLock<State<'static, Keccak256Hasher, ProfitStateData>>>,
+) {
+    let mut profit_state = state.write().unwrap();
+    for i in 0..count {
+        let address: Address = u64_to_ethereum_address(i);
+        let token: Address = u64_to_ethereum_address(i + 1);
+        let path: H256 = chain_token_address_convert_to_h256(i, token, address);
+        let profit = ProfitStateData {
+            token,
+            token_chain_id: i,
+            balance: U256::from_dec_str("1000").unwrap(),
+            debt: U256::from(0),
+        };
+        profit_state.try_update_all(vec![(path, profit)]).unwrap();
+        println!("update profit: {:?}", i);
+    }
+}
+
+fn u64_to_ethereum_address(input: u64) -> Address {
+    let mut hex_string = format!("{:x}", input);
+    while hex_string.len() < 40 {
+        hex_string.insert(0, '0');
+    }
+    let address_str = format!("0x{}", hex_string);
+    Address::from_str(&address_str).expect("Failed to parse Ethereum address")
 }

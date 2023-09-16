@@ -1,21 +1,30 @@
 #![allow(unreachable_patterns)]
 
 use async_trait::async_trait;
-use ethers::types::{Address, StorageProof, U256};
-use ethers::utils::hex;
-use jsonrpsee::core::RpcResult;
-use jsonrpsee::types::{error::ErrorCode, ErrorObject, ErrorObjectOwned};
+use ethers::{
+    types::{Address, StorageProof, U256},
+    utils::hex,
+};
+use jsonrpsee::{
+    core::RpcResult,
+    types::{error::ErrorCode, ErrorObject, ErrorObjectOwned},
+};
 use primitives::{
     constants::*,
-    traits::{DebugApiServer, SubmitterApiServer},
+    error::Error as StateError,
+    func::*,
+    traits::{DebugApiServer, StataTrait, SubmitterApiServer},
     types::*,
 };
-use primitives::{error::Error as StateError, func::*, traits::StataTrait};
 use sparse_merkle_tree::merge::MergeValue;
-use state::{Keccak256Hasher, State, Value, H256};
-use std::ops::Deref;
-use std::str::FromStr;
-use std::sync::{Arc, RwLock};
+use state::{Keccak256Hasher, SmtValue, State, Value, H256};
+use std::{
+    ops::Deref,
+    str::FromStr,
+    sync::{Arc, RwLock},
+};
+use txs::sled_db::{ProfitStatisticsDB, UserTokensDB};
+use utils::{get_no1_merge_value, SMTBitMap};
 
 pub struct JsonRpcError(pub ErrorObjectOwned);
 
@@ -53,10 +62,13 @@ impl From<StateError> for JsonRpcError {
 
 pub struct SubmitterApiServerImpl<'a> {
     pub state: Arc<RwLock<State<'a, Keccak256Hasher, ProfitStateData>>>,
+    pub user_tokens_db: Arc<UserTokensDB>,
+    pub profit_statistics_db: Arc<ProfitStatisticsDB>,
 }
 
 pub struct DebugApiServerImpl<'a> {
     pub state: Arc<RwLock<State<'a, Keccak256Hasher, ProfitStateData>>>,
+    pub user_tokens_db: Arc<UserTokensDB>,
 }
 
 #[async_trait]
@@ -74,13 +86,8 @@ impl DebugApiServer for DebugApiServerImpl<'static> {
             .map_err(|e| Into::<JsonRpcError>::into(e))?;
         Ok(())
     }
-    async fn update_profit(
-        &self,
-        chain_id: u64,
-        token_id: Address,
-        address: Address,
-        amount: U256,
-    ) -> RpcResult<H256> {
+
+    async fn update_profit(&self, user: Address, profit: ProfitStateData) -> RpcResult<H256> {
         let mut state = self.state.write().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_WRITE_ERROR_CODE,
@@ -88,18 +95,52 @@ impl DebugApiServer for DebugApiServerImpl<'static> {
                 None::<bool>,
             )
         })?;
-        let key = chain_token_address_convert_to_h256(chain_id, token_id, address);
-        let value = ProfitStateData {
-            token: token_id,
-            token_chain_id: chain_id.clone(),
-            balance: amount,
-            debt: Default::default(),
-        };
+        let _ = self
+            .user_tokens_db
+            .insert_token(user, profit.token_chain_id, profit.token)
+            .unwrap();
+        let key = chain_token_address_convert_to_h256(profit.token_chain_id, profit.token, user);
         let root = state
-            .try_update_all(vec![(key, vec![value])])
+            .try_update_all(vec![(key, profit)])
             .map_err(|e| Into::<JsonRpcError>::into(e))?;
         Ok(root)
     }
+
+    async fn update_profit_by_count(&self, count: u64) -> RpcResult<H256> {
+        let mut profit_state = self.state.write().map_err(|_| {
+            ErrorObject::owned(
+                RWLOCK_WRITE_ERROR_CODE,
+                format!("error: state write error."),
+                None::<bool>,
+            )
+        })?;
+        for i in 0..count {
+            let address: Address = u64_to_ethereum_address(i);
+            let token: Address = u64_to_ethereum_address(i + 1);
+            let path: H256 = chain_token_address_convert_to_h256(i, token, address);
+            let profit = ProfitStateData {
+                token,
+                token_chain_id: i,
+                balance: U256::from_dec_str("1000").unwrap(),
+                debt: U256::from(0),
+            };
+            profit_state.try_update_all(vec![(path, profit)]).unwrap();
+            println!("update profit: {:?}", i);
+        }
+        let root = profit_state
+            .try_get_root()
+            .map_err(|e| Into::<JsonRpcError>::into(e))?;
+        Ok(root)
+    }
+}
+
+fn u64_to_ethereum_address(input: u64) -> Address {
+    let mut hex_string = format!("{:x}", input);
+    while hex_string.len() < 40 {
+        hex_string.insert(0, '0');
+    }
+    let address_str = format!("0x{}", hex_string);
+    Address::from_str(&address_str).expect("Failed to parse Ethereum address")
 }
 
 #[async_trait]
@@ -108,7 +149,7 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
         &self,
         user: Address,
         tokens: Vec<(u64, Address)>,
-    ) -> RpcResult<Vec<ProfitStateData>> {
+    ) -> RpcResult<Vec<ProfitStateDataForRpc>> {
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_READ_ERROR_CODE,
@@ -116,53 +157,45 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
                 None::<bool>,
             )
         })?;
-        if tokens.len() == 0 {
-            return Err(ErrorObject::owned(
-                PARAMETER_ERROR_CODE,
-                format!("error: tokens is empty."),
-                None::<bool>,
-            ));
-        }
 
-        let mut v: Vec<ProfitStateData> = vec![];
+        let mut v: Vec<ProfitStateDataForRpc> = vec![];
 
         for i in tokens {
-            let info = state
+            let info: ProfitStateData = state
                 .try_get(chain_token_address_convert_to_h256(i.0, i.1, user))
-                .map_err(|e| Into::<JsonRpcError>::into(e))?
-                .ok_or(ErrorObject::owned(
-                    ACCOUNT_NOT_EXISTS_CODE,
-                    format!("error: account is not in off-chain-state."),
-                    None::<bool>,
-                ))?[0]
-                .clone();
+                .map_err(|e| Into::<JsonRpcError>::into(e))?;
+            if info.balance == U256::zero() && info.debt == U256::zero() {
+                continue;
+            }
+            let mut total_profit = U256::zero();
+            let mut total_withdrawn = U256::zero();
+            if let Some(profit_statistics) = self
+                .profit_statistics_db
+                .get_profit_statistics(user, info.token_chain_id, info.token)
+                .unwrap()
+            {
+                total_profit = profit_statistics.total_profit;
+                total_withdrawn = profit_statistics.total_withdrawn;
+            }
+
+            let info = ProfitStateDataForRpc {
+                token: info.token,
+                token_chain_id: info.token_chain_id,
+                balance: info.balance,
+                debt: info.debt,
+                total_profit: total_profit,
+                total_withdrawn: total_withdrawn,
+            };
             v.push(info);
         }
 
         Ok(v)
     }
-    //
-    // async fn get_all_profit_info(&self, address: Address) -> RpcResult<Vec<ProfitStateData>> {
-    //     let token1 = ProfitStateData {
-    //         token: Address::from_str("0x0000000000000000000000000000000000000011").unwrap(),
-    //         token_chain_id: 0,
-    //         balance: Default::default(),
-    //         debt: U256::from(100),
-    //     };
-    //     let token2 = ProfitStateData {
-    //         token: Address::from_str("0x0000000000000000000000000000000000000022").unwrap(),
-    //         token_chain_id: 1,
-    //         balance: U256::from(200),
-    //         debt: Default::default(),
-    //     };
-    //     let token3 = ProfitStateData {
-    //         token: Address::from_str("0x0000000000000000000000000000000000000033").unwrap(),
-    //         token_chain_id: 2,
-    //         balance: U256::from(100),
-    //         debt: Default::default(),
-    //     };
-    //     Ok(vec![token1, token2, token3])
-    // }
+
+    async fn get_all_profit_info(&self, user: Address) -> RpcResult<Vec<ProfitStateDataForRpc>> {
+        let tokens = self.user_tokens_db.get_tokens(user).unwrap();
+        self.get_profit_info(user, tokens).await
+    }
 
     async fn get_root(&self) -> RpcResult<String> {
         let state = self.state.read().map_err(|_| {
@@ -194,25 +227,29 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
         if tokens.len() == 0 {
             return Ok(v);
         }
+        let root = state
+            .try_get_root()
+            .map_err(|e| Into::<JsonRpcError>::into(e))?;
+
         for i in tokens.clone() {
             let bitmap_and_sils = state
                 .try_get_merkle_proof_1(chain_token_address_convert_to_h256(i.0, i.1, user))
                 .map_err(|e| Into::<JsonRpcError>::into(e))?;
             let old_token = state
                 .try_get(chain_token_address_convert_to_h256(i.0, i.1, user))
-                .map_err(|e| Into::<JsonRpcError>::into(e))?
-                .ok_or(ErrorObject::owned(
-                    ACCOUNT_NOT_EXISTS_CODE,
-                    format!("error: account is not in off-chain-state."),
-                    None::<bool>,
-                ))?[0]
-                .clone();
-
+                .map_err(|e| Into::<JsonRpcError>::into(e))?;
+            let no1_merge_value = get_no1_merge_value(
+                chain_token_address_convert_to_h256(i.0, i.1, user).into(),
+                SmtValue::new(old_token.clone()).unwrap(),
+                bitmap_and_sils.0.into(),
+            );
             v.push(ProfitProof {
                 path: chain_token_address_convert_to_h256(i.0, i.1, user).into(),
                 leave_bitmap: bitmap_and_sils.0.into(),
                 token: old_token,
                 siblings: bitmap_and_sils.1,
+                root: root.into(),
+                no1_merge_value,
             });
         }
         Ok(v)
