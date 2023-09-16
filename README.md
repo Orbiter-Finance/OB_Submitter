@@ -13,20 +13,22 @@ todo
 ### Local
 
 1. install git
+```asm
+sudo apt install git
+```
 2. install rust
 ```angular2html
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 3. install clang and llvm
 ```angular2html
-sudo yum install clang llvm
+sudo apt install clang llvm
 ```
 
 4. build submitter
 ```angular2html
 git clone https://github.com/YanOctavian/submitter.git
 cd submitter
-git checkout dev
 cargo build --release
 ```
 5. run submitter
@@ -39,7 +41,7 @@ cargo build --release
 ```
 command
 ```angular2html
-./target/release/submitter --rpc-port 50001 --db-path db --debug --start-block 0
+./target/release/submitter --rpc-port 50001 --db-path db
 ```
 
 
