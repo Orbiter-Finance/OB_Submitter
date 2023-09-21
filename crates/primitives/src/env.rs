@@ -10,7 +10,7 @@ pub fn get_mainnet_chain_id() -> u64 {
 }
 
 pub fn get_fee_manager_contract_address() -> Address {
-    std::env::var("FEE_MANAGER_CONTRACT_ADDRESS")
+    std::env::var("ORFeeManager_CONTRACT_ADDRESS")
         .unwrap()
         .parse()
         .unwrap()
