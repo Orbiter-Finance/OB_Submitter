@@ -33,16 +33,14 @@ cargo build --release
 ```
 5. run submitter
 ```angular2html
-// Options:
-//      --rpc-port <RPC_PORT>        rpc server's port [default: 50001]
-//      --db-path <DB_PATH>          state db's path [default: db]
-//      --debug                      debug mode
-//      --start-block <START_BLOCK>  debug mode [default: 0]
+./target/release/submitter
 ```
-command
-```angular2html
-./target/release/submitter --rpc-port 50001 --db-path db
+6. view log
+```asm
+// for example
+tail -f -n 100 db/logs/submitter.log.2023-09-20
 ```
+
 
 
 
