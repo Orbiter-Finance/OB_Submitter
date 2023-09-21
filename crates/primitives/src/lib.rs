@@ -1,4 +1,5 @@
 pub mod constants;
+pub mod env;
 pub mod error;
 pub mod func;
 pub mod keccak256_hasher;

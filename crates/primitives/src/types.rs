@@ -15,6 +15,13 @@ use serde_with::serde_as;
 use sparse_merkle_tree::{h256::H256, merge::MergeValue, traits::Hasher};
 use std::{cmp::min, str::FromStr, sync::atomic::Ordering};
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ChainType {
+    ZK,
+    OP,
+    Normal,
+}
+
 #[serde_as]
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct ProfitProof {
@@ -49,6 +56,7 @@ pub struct ProfitStateDataForRpc {
 pub trait Debt {
     fn add_balance(&mut self, amount: U256) -> std::result::Result<(), String>;
     fn sub_balance(&mut self, amount: U256) -> std::result::Result<(), String>;
+    fn try_clear(&mut self) -> std::result::Result<(), String>;
 }
 
 impl Debt for ProfitStateData {
@@ -58,6 +66,7 @@ impl Debt for ProfitStateData {
         self.debt = debt.checked_sub(min_debt).ok_or("overflow")?;
         let amount = amount.checked_sub(min_debt).ok_or("overflow")?;
         self.balance = self.balance.checked_add(amount).ok_or("overflow")?;
+        self.try_clear()?;
         Ok(())
     }
 
@@ -65,6 +74,15 @@ impl Debt for ProfitStateData {
         let min_amount = min(amount, self.balance);
         self.balance = self.balance.checked_sub(min_amount).ok_or("overflow")?;
         self.debt = self.debt + (amount - min_amount);
+        self.try_clear()?;
+        Ok(())
+    }
+
+    fn try_clear(&mut self) -> std::result::Result<(), String> {
+        if self.balance.is_zero() && self.debt.is_zero() {
+            self.token = Address::default();
+            self.token_chain_id = 0;
+        }
         Ok(())
     }
 }
@@ -145,11 +163,16 @@ impl Tokenizable for ProfitStateData {
     }
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[serde_as]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct BlocksStateData {
     pub block_num: u64,
+    #[serde_as(as = "serde_with::hex::Hex")]
     pub root: [u8; 32],
+    #[serde_as(as = "serde_with::hex::Hex")]
     pub txs: [u8; 32],
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub profit_root: [u8; 32],
 }
 
 pub trait Chain {
@@ -161,6 +184,7 @@ impl Chain for BlocksStateData {
         let mut hasher = Keccak256Hasher::default();
         hasher.write_h256(&H256::from(old_block.root));
         hasher.write_h256(&H256::from(self.txs.clone()));
+        hasher.write_h256(&H256::from(self.profit_root));
         self.root = hasher.finish().into();
     }
 }
@@ -173,7 +197,7 @@ impl Tokenizable for BlocksStateData {
         Self: Sized,
     {
         if let Token::Tuple(tuple) = token {
-            if tuple.len() == 3 {
+            if tuple.len() == 4 {
                 let block_num = tuple[0]
                     .clone()
                     .into_uint()
@@ -192,11 +216,18 @@ impl Tokenizable for BlocksStateData {
                     .ok_or(InvalidOutputType(format!(
                         "BlocksStateData from_token error: txs"
                     )))?;
+                let profit_root = tuple[3]
+                    .clone()
+                    .into_fixed_bytes()
+                    .ok_or(InvalidOutputType(format!(
+                        "BlocksStateData from_token error: profit_root"
+                    )))?;
 
                 return Ok(BlocksStateData {
                     block_num: block_num.as_u64(),
                     root: root[..32].to_owned().try_into().unwrap(),
                     txs: txs[..32].to_owned().try_into().unwrap(),
+                    profit_root: profit_root[..32].to_owned().try_into().unwrap(),
                 });
             }
         }
@@ -210,6 +241,7 @@ impl Tokenizable for BlocksStateData {
         tuple.push(Token::Uint(self.block_num.into()));
         tuple.push(Token::FixedBytes(self.root.into()));
         tuple.push(Token::FixedBytes(self.txs.into()));
+        tuple.push(Token::FixedBytes(self.profit_root.into()));
         Token::Tuple(tuple)
     }
 }
@@ -219,6 +251,7 @@ impl AbiDecode for BlocksStateData {
         decode(
             &vec![ParamType::Tuple(vec![
                 ParamType::Uint(64),
+                ParamType::FixedBytes(32),
                 ParamType::FixedBytes(32),
                 ParamType::FixedBytes(32),
             ])],
@@ -261,30 +294,29 @@ pub struct CrossTxRawData {
     pub dealer_address: String,
 
     // token
-    pub source_address: String,
-    pub source_amount: String,
+    pub source_address: Option<String>,
+    pub source_amount: Option<String>,
     pub source_chain: String,
-    // tx hash
     pub source_id: String,
     //
     pub source_maker: String,
-    pub source_symbol: String,
+    pub source_symbol: Option<String>,
     pub source_time: u64,
     pub source_token: String,
     // maker address
     pub target_address: String,
-    pub target_amount: String,
+    pub target_amount: Option<String>,
     pub target_chain: String,
     // tx_hash
     pub target_id: String,
     pub target_maker: Option<String>,
-    pub target_symbol: String,
+    pub target_symbol: Option<String>,
     pub target_time: u64,
     pub target_token: String,
 
     pub trade_fee: String,
     pub trade_fee_decimals: u8,
-    pub withholding_fee: String,
+    pub withholding_fee: Option<String>,
     pub withholding_fee_decimals: u8,
 }
 
@@ -298,20 +330,36 @@ impl From<CrossTxRawData> for CrossTxData {
         CrossTxData {
             dealer_address: Address::from_str(&value.dealer_address).unwrap(),
             profit: U256::from_dec_str(&value.trade_fee).unwrap(),
-            source_address: value.source_address.parse().unwrap(),
-            source_amount: value.source_amount,
+            source_address: Address::default(), //value.source_address.parse().unwrap(),
+            source_amount: if let Some(source_amount) = value.source_amount {
+                source_amount
+            } else {
+                String::from("0")
+            },
             source_chain: value.source_chain.parse().unwrap(),
             source_id: value.source_id,
             source_maker: Address::from_str(&value.source_maker).unwrap(),
-            source_symbol: value.source_symbol,
+            source_symbol: if let Some(source_symbol) = value.source_symbol {
+                source_symbol
+            } else {
+                String::from("")
+            },
             source_time: value.source_time,
             source_token: Address::from_str(&value.source_token).unwrap(),
             target_address: Address::from_str(&value.target_address).unwrap(),
-            target_amount: value.target_amount,
+            target_amount: if let Some(target_amount) = value.target_amount {
+                target_amount
+            } else {
+                String::from("0")
+            },
             target_chain: value.target_chain.parse().unwrap(),
             target_id: target_id.into(),
             target_maker: None,
-            target_symbol: value.target_symbol,
+            target_symbol: if let Some(target_symbol) = value.target_symbol {
+                target_symbol
+            } else {
+                String::from("")
+            },
             target_time: value.target_time,
             target_token: Address::from_str(&value.target_token).unwrap(),
         }

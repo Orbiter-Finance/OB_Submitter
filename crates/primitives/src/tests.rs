@@ -11,6 +11,9 @@ use ethers::{
     utils::hex,
 };
 use std::str::FromStr;
+// use ethers::types::H256;
+use crate::keccak256_hasher::Keccak256Hasher;
+use sparse_merkle_tree::{traits::Hasher, H256};
 
 #[test]
 fn main() {
@@ -20,4 +23,7 @@ fn main() {
     let res = chain_token_address_convert_to_h256(token_chain_id, token, user);
     println!("res: {:?}", res);
     println!("res hex: {:?}", hex::encode(res.as_slice()));
+    let mut hasher = Keccak256Hasher::default();
+    // hasher.write_h256(&H256::from([0; 32]));
+    println!("hash: {:?}", hex::encode(hasher.finish().as_slice()));
 }

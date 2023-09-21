@@ -15,6 +15,7 @@ use jsonrpsee::{
 };
 use lazy_static::lazy_static;
 use primitives::{
+    env::get_chains_info_source_url,
     func::chain_token_address_convert_to_h256,
     traits::{DebugApiServer, StataTrait, SubmitterApiServer},
     types::{BlockInfo, BlocksStateData, ProfitStateData},
@@ -32,6 +33,7 @@ use tokio::sync::OnceCell;
 use tracing::{event, Level};
 use tracing_appender::rolling::daily;
 use tracing_subscriber::{fmt::format, FmtSubscriber};
+use txs::rocks_db::TxsRocksDB;
 use txs::{funcs::SupportChains, Submitter};
 
 pub struct JsonRpcServer {
@@ -179,11 +181,14 @@ pub async fn run() -> Result<()> {
     let user_tokens_db = Arc::new(txs::sled_db::UserTokensDB::new(sled_db.clone()).unwrap());
     let profit_statistics_db =
         Arc::new(txs::sled_db::ProfitStatisticsDB::new(sled_db.clone()).unwrap());
+    let txs_db = Arc::new(TxsRocksDB::new(args.db_path.clone()).unwrap());
     rpc_server.add_mothod(
         SubmitterApiServerImpl {
             state: profit_state.clone(),
+            blocks_state: blocks_state.clone(),
             user_tokens_db: user_tokens_db.clone(),
             profit_statistics_db: profit_statistics_db.clone(),
+            txs_db: txs_db.clone(),
         }
         .into_rpc(),
     )?;
@@ -195,18 +200,17 @@ pub async fn run() -> Result<()> {
             }
             .into_rpc(),
         )?;
-        tokio::spawn(insert_profit_by_count(100_0000, profit_state.clone()));
+        // tokio::spawn(insert_profit_by_count(100_0000, profit_state.clone()));
     }
 
     let server_handle = server.start(rpc_server.mothods.clone())?;
 
     event!(Level::INFO, "Rpc server start at: {:?}", addr);
     tokio::spawn(server_handle.stopped());
+
     let start_block_num1 = Arc::new(tokio::sync::RwLock::new(args.start_block));
     let (s, r) = tokio::sync::broadcast::channel::<BlockInfo>(100);
-    let support_chains_crawler = SupportChains::new(
-        std::env::var("SUPPORT_CHAINS_SOURCE_URL").expect("SUPPORT_CHAINS_SOURCE_URL is not set"),
-    );
+    let support_chains_crawler = SupportChains::new(get_chains_info_source_url());
     let tokens: Arc<Vec<Address>> =
         Arc::new(support_chains_crawler.get_mainnet_support_tokens().await?);
     let contract = Arc::new(
@@ -231,6 +235,7 @@ pub async fn run() -> Result<()> {
         contract.clone(),
         start_block_num.clone(),
         sled_db.clone(),
+        txs_db.clone(),
         args.db_path,
     );
     tokio::spawn(async move {

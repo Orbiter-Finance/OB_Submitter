@@ -23,7 +23,10 @@ use std::{
     str::FromStr,
     sync::{Arc, RwLock},
 };
-use txs::sled_db::{ProfitStatisticsDB, UserTokensDB};
+use txs::{
+    rocks_db::TxsRocksDB,
+    sled_db::{ProfitStatisticsDB, UserTokensDB},
+};
 use utils::{get_no1_merge_value, SMTBitMap};
 
 pub struct JsonRpcError(pub ErrorObjectOwned);
@@ -62,8 +65,10 @@ impl From<StateError> for JsonRpcError {
 
 pub struct SubmitterApiServerImpl<'a> {
     pub state: Arc<RwLock<State<'a, Keccak256Hasher, ProfitStateData>>>,
+    pub blocks_state: Arc<RwLock<State<'a, Keccak256Hasher, BlocksStateData>>>,
     pub user_tokens_db: Arc<UserTokensDB>,
     pub profit_statistics_db: Arc<ProfitStatisticsDB>,
+    pub txs_db: Arc<TxsRocksDB>,
 }
 
 pub struct DebugApiServerImpl<'a> {
@@ -87,7 +92,7 @@ impl DebugApiServer for DebugApiServerImpl<'static> {
         Ok(())
     }
 
-    async fn update_profit(&self, user: Address, profit: ProfitStateData) -> RpcResult<H256> {
+    async fn update_profit(&self, user: Address, mut profit: ProfitStateData) -> RpcResult<H256> {
         let mut state = self.state.write().map_err(|_| {
             ErrorObject::owned(
                 RWLOCK_WRITE_ERROR_CODE,
@@ -100,6 +105,7 @@ impl DebugApiServer for DebugApiServerImpl<'static> {
             .insert_token(user, profit.token_chain_id, profit.token)
             .unwrap();
         let key = chain_token_address_convert_to_h256(profit.token_chain_id, profit.token, user);
+        profit.try_clear().unwrap();
         let root = state
             .try_update_all(vec![(key, profit)])
             .map_err(|e| Into::<JsonRpcError>::into(e))?;
@@ -197,6 +203,12 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
         self.get_profit_info(user, tokens).await
     }
 
+    async fn get_profit_by_tx_hash(&self, tx_hash: H256) -> RpcResult<Option<CrossTxProfit>> {
+        self.txs_db.get_profit_by_yx_hash(tx_hash).map_err(|_| {
+            ErrorObject::owned(1111, format!("error: get tx's profit err."), None::<bool>)
+        })
+    }
+
     async fn get_root(&self) -> RpcResult<String> {
         let state = self.state.read().map_err(|_| {
             ErrorObject::owned(
@@ -227,11 +239,11 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
         if tokens.len() == 0 {
             return Ok(v);
         }
-        let root = state
-            .try_get_root()
-            .map_err(|e| Into::<JsonRpcError>::into(e))?;
 
         for i in tokens.clone() {
+            let root = state
+                .try_get_root()
+                .map_err(|e| Into::<JsonRpcError>::into(e))?;
             let bitmap_and_sils = state
                 .try_get_merkle_proof_1(chain_token_address_convert_to_h256(i.0, i.1, user))
                 .map_err(|e| Into::<JsonRpcError>::into(e))?;
@@ -276,5 +288,20 @@ impl SubmitterApiServer for SubmitterApiServerImpl<'static> {
             .map_err(|e| Into::<JsonRpcError>::into(e))?
             == proof;
         Ok(verify)
+    }
+
+    async fn get_profit_root_by_block_num(&self, block_num: u64) -> RpcResult<BlocksStateData> {
+        let blocks_state = self.blocks_state.read().map_err(|_| {
+            ErrorObject::owned(
+                RWLOCK_READ_ERROR_CODE,
+                format!("error: state read error."),
+                None::<bool>,
+            )
+        })?;
+        let key = block_number_convert_to_h256(block_num);
+        let root = blocks_state
+            .try_get(key)
+            .map_err(|e| Into::<JsonRpcError>::into(e))?;
+        Ok(root)
     }
 }

@@ -11,6 +11,7 @@ primitives = { path = "../primitives"}
 ethers.workspace = true
 async-trait = "0.1.73"
 anyhow = "1.0.75"
-ethers-providers = "2.0.9"
+ethers-providers = {git = "https://github.com/gakonst/ethers-rs.git"}
 serde = "1.0.188"
 tracing.workspace = true
+ecdsa = "0.16.8"

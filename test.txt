@@ -1,0 +1,27 @@
+
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"orbiter_getBridgeSuccessfulTransaction","params":[{"id":"420","timestamp": [1695033360000,1695033384000]}],"id":1}' https://openapi2.orbiter.finance/v3/yj6toqvwh1177e1sexfy0u1pxx5j8o47
+
+/// remote
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"debug_updateProfit","params":{"user": "0x0000000000000000000000000000000000000022", "profit": {"token":"0x0000000000000000000000000000000000000022","token_chain_id":1,"balance":"0xc8","debt":"0x0"}},"id":1}' http://ec2-user@ec2-18-177-96-112.ap-northeast-1.compute.amazonaws.com
+// clear state
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"debug_clearState","params":{},"id":1}' http://localhost:50001
+// update profit
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"debug_updateProfitByCount","params":{"count": 100},"id":1}' http://ec2-user@ec2-18-177-96-112.ap-northeast-1.compute.amazonaws.com
+
+// get profit
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getProfitInfo","params":{"user": "0x0000000000000000000000000000000000000022", "tokens": [[1, "0x0000000000000000000000000000000000000022"]]},"id":1}' http://ec2-user@ec2-18-177-96-112.ap-northeast-1.compute.amazonaws.com
+// get profit proof
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getProfitProof","params":{"user": "0xc3C7A782dda00a8E61Cb9Ba0ea8680bb3f3B9d10", "tokens": [[5, "0x29b6a77911c1ce3b3849f28721c65dada015c768"]]},"id":1}' http://ec2-user@ec2-18-177-96-112.ap-northeast-1.compute.amazonaws.com
+// get root
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getRoot","params":{},"id":1}' http://ec2-user@ec2-18-177-96-112.ap-northeast-1.compute.amazonaws.com
+// get user profit
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getAllProfitInfo","params":{"address": "0xc3C7A782dda00a8E61Cb9Ba0ea8680bb3f3B9d10"},"id":1}' http://ec2-user@ec2-18-177-96-112.ap-northeast-1.compute.amazonaws.com
+// get block state by block num
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getProfitRootByBlockNum","params":{"block_num": 9721160},"id":1}' http://ec2-user@ec2-18-177-96-112.ap-northeast-1.compute.amazonaws.com
+
+/// local
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"debug_updateProfit","params":{"user": "0xc3C7A782dda00a8E61Cb9Ba0ea8680bb3f3B9d10", "profit": {"token":"0x0000000000000000000000000000000000000022","token_chain_id":1,"balance":"0xc8","debt":"0xc8"}},"id":1}' http://127.0.0.1:50001
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getRoot","params":{},"id":1}' http://127.0.0.1:50001
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getProfitInfo","params":{"user": "0xc3C7A782dda00a8E61Cb9Ba0ea8680bb3f3B9d10", "tokens": [[1, "0x0000000000000000000000000000000000000022"]]},"id":1}' http://127.0.0.1:50001
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getProfitProof","params":{"user": "0xc3C7A782dda00a8E61Cb9Ba0ea8680bb3f3B9d10", "tokens": [[1, "0x0000000000000000000000000000000000000022"]]},"id":1}' http://127.0.0.1:50001
+curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"debug_clearState","params":{},"id":1}' http://localhost:50001

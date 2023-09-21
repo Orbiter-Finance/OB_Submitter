@@ -3,6 +3,10 @@ mod tests;
 use crate::fee_manager_contract::WithdrawFilter;
 
 use async_trait::async_trait;
+use ethers::core::k256::{self, ecdsa::SigningKey, Secp256k1};
+use ethers::prelude::Wallet;
+use ethers::prelude::{FunctionCall, Multicall};
+use ethers::providers::Http;
 use ethers::{
     contract::{abigen, Contract, EthEvent},
     middleware::{Middleware, SignerMiddleware},
@@ -12,6 +16,7 @@ use ethers::{
 };
 use ethers_providers::StreamExt;
 use primitives::{
+    env::{get_fee_manager_contract_address, get_mainnet_chain_id, get_network_https_url},
     error::{Error as LocalError, Result},
     traits::Contract as ContractTrait,
     types::{BlockInfo, BlockStorage, DepositEvent, Event, FeeManagerDuration, WithdrawEvent},
@@ -59,14 +64,13 @@ impl SubmitterContract {
         now_block_num: Arc<RwLock<u64>>,
         support_mainnet_tokens: Arc<Vec<Address>>,
     ) -> Self {
-        let provider = Provider::<ethers::providers::Http>::try_from(
-            std::env::var("NETWORK_RPC_URL").unwrap(),
-        )
-        .unwrap();
+        let provider =
+            Provider::<ethers::providers::Http>::try_from(get_network_https_url()).unwrap();
 
-        let client = SignerMiddleware::new_with_provider_chain(provider.clone(), wallet.clone())
-            .await
-            .unwrap();
+        let client: SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>> =
+            SignerMiddleware::new_with_provider_chain(provider.clone(), wallet.clone())
+                .await
+                .unwrap();
         event!(
             Level::INFO,
             "Successfully connected to the ethereum network. Support mainnet tokens: {:?}",
@@ -122,19 +126,18 @@ impl ContractTrait for SubmitterContract {
         profit_root: [u8; 32],
         blocks_root: [u8; 32],
     ) -> Result<H256> {
-        let fee_manager_contract_address: H160 = std::env::var("FEE_MANAGER_CONTRACT_ADDRESS")
-            .unwrap()
-            .parse()
-            .unwrap();
+        let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let fee_manager_contract =
             FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));
 
-        let res: Option<TransactionReceipt> = fee_manager_contract
+        let s: FunctionCall<
+            Arc<SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>>,
+            SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>,
+            (),
+        > = fee_manager_contract
             .submit(start, end, profit_root, blocks_root)
-            .gas(2000000)
-            .send()
-            .await?
-            .await?;
+            .gas(2000000);
+        let res: Option<TransactionReceipt> = s.send().await?.await?;
 
         match res {
             None => {
@@ -169,10 +172,7 @@ impl ContractTrait for SubmitterContract {
     }
 
     async fn get_block_storage(&self, block_number: u64) -> Result<Option<BlockStorage>> {
-        let fee_manager_contract_address: H160 = std::env::var("FEE_MANAGER_CONTRACT_ADDRESS")
-            .unwrap()
-            .parse()
-            .unwrap();
+        let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let fee_manager_contract =
             FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));
         let mut block_storage: Option<BlockStorage> = None;
@@ -181,11 +181,26 @@ impl ContractTrait for SubmitterContract {
             match block_info {
                 None => {}
                 Some(b) => {
-                    let duration = fee_manager_contract
-                        .duration_check()
-                        .block(block_number)
-                        .await?;
+                    let duration_check: FunctionCall<
+                        Arc<SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>>,
+                        SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>,
+                        u8,
+                    > = fee_manager_contract.duration_check().block(block_number);
+                    let duration = duration_check.await?;
 
+                    // fixme
+                    // let first_call = fee_manager_contract.method::<_, String>("getValue", ()).unwrap();
+                    // let mut multicall = Multicall::new(self.client.clone(), None).await.unwrap();
+                    // multicall.add_call(first_call, false);
+                    // let results = multicall.call().await.unwrap();
+                    // let tx_receipt = multicall.send().await?.await.expect("tx dropped");
+                    // multicall
+                    //     .clear_calls()
+                    //     .add_get_eth_balance(address_1, false)
+                    //     .add_get_eth_balance(address_2, false);
+                    // let balances: (U256, U256) = multicall.call().await?;
+
+                    let s = fee_manager_contract.submissions();
                     let (_, endBlock, submitTimestamp, profitRoot, _) = fee_manager_contract
                         .submissions()
                         .block(block_number)
@@ -217,10 +232,7 @@ impl ContractTrait for SubmitterContract {
         if tokens.is_empty() {
             return Ok(vec![]);
         }
-        let fee_manager_contract_address: H160 = std::env::var("FEE_MANAGER_CONTRACT_ADDRESS")
-            .unwrap()
-            .parse()
-            .unwrap();
+        let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let mut transfer_los: Vec<Event> = vec![];
         use ethers::abi::Abi;
         for token in tokens {
@@ -244,11 +256,11 @@ impl ContractTrait for SubmitterContract {
                     let amount = i.value;
                     transfer_los.push(Event::Deposit(DepositEvent {
                         address: user,
-                        chain_id: std::env::var("MAINNET_CHAIN_ID").unwrap().parse().unwrap(),
+                        chain_id: get_mainnet_chain_id(),
                         token_address: token,
                         balance: amount,
                     }));
-                    event!(Level::INFO, "erc20 log: {:?}", i);
+                    event!(Level::INFO, "Block #{:?} erc20 log: {:?}", block_number, i);
                 }
             }
         }
@@ -257,10 +269,7 @@ impl ContractTrait for SubmitterContract {
     }
 
     async fn get_feemanager_contract_events(&self, block_number: u64) -> Result<Vec<Event>> {
-        let fee_manager_contract_address: H160 = std::env::var("FEE_MANAGER_CONTRACT_ADDRESS")
-            .unwrap()
-            .parse()
-            .unwrap();
+        let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let fee_manager_contract =
             FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));
         let withdraw_logs: Vec<WithdrawFilter> = fee_manager_contract
@@ -295,7 +304,7 @@ impl ContractTrait for SubmitterContract {
 
             a.push(Event::Deposit(DepositEvent {
                 address: user,
-                chain_id: std::env::var("MAINNET_CHAIN_ID").unwrap().parse().unwrap(),
+                chain_id: get_mainnet_chain_id(),
                 token_address: Default::default(),
                 balance: amount,
             }));
@@ -303,7 +312,7 @@ impl ContractTrait for SubmitterContract {
         if !a.is_empty() {
             event!(
                 Level::INFO,
-                "get block {:?} logs: {:?}",
+                "Block #{:?} logs: {:?}",
                 block_number,
                 a.clone()
             );
@@ -342,10 +351,7 @@ impl ContractTrait for SubmitterContract {
         _token_chian_id: u64,
         _token_id: Address,
     ) -> Result<u64> {
-        let fee_manager_contract_address: H160 = std::env::var("FEE_MANAGER_CONTRACT_ADDRESS")
-            .unwrap()
-            .parse()
-            .unwrap();
+        let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let fee_manager_contract =
             FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));
         let info = fee_manager_contract

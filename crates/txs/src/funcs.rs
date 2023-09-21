@@ -2,7 +2,10 @@
 
 #[allow(unused_imports)]
 use super::*;
-use primitives::types::{CrossTxData, CrossTxRawData};
+use primitives::{
+    env::get_mainnet_chain_id,
+    types::{CrossTxData, CrossTxRawData},
+};
 use serde::{Deserialize, Serialize};
 use state::{Hasher, Keccak256Hasher};
 use std::string::String;
@@ -56,13 +59,14 @@ impl TxsCrawler {
                 .checked_sub(delay_timestamp)
                 .ok_or(anyhow::anyhow!(
                     "start_timestamp checked_sub delay_timestamp error"
-                ))?;
+                ))?
+                * 1000;
         let end_timestamp = end_timestamp
             .checked_sub(delay_timestamp)
             .ok_or(anyhow::anyhow!(
                 "end_timestamp checked_sub delay_timestamp error"
-            ))?;
-
+            ))?
+            * 1000;
         let res = self
             .client
             .post(self.url.clone())
@@ -73,7 +77,7 @@ impl TxsCrawler {
                 "method": self.method,
                 "params": [{
                     "id": chain_id,
-                    "timestamp": [start_timestamp*1000, end_timestamp*1000]
+                    "timestamp": [start_timestamp, end_timestamp]
                 }]
             }))
             .send()
@@ -83,15 +87,24 @@ impl TxsCrawler {
             || (res.status() == reqwest::StatusCode::CREATED)
         {
             let res: Value = serde_json::from_str(&res.text().await?)?;
+            // event!(Level::INFO, "response: {:#?}", res);
             // println!("response: {:#?}", res);
             let res: &Value = &res["result"][chain_id.to_string()];
             let old_txs: Vec<CrossTxRawData> = serde_json::from_value(res.clone())?;
             let mut new_txs: Vec<CrossTxRawData> = vec![];
             for tx in old_txs {
+                println!("tx: {:?}", tx);
+                event!(Level::INFO, "tx: {:?}", tx);
                 let mut tx = tx;
                 tx.target_time = tx.target_time + delay_timestamp * 1000;
                 new_txs.push(tx);
             }
+            // if new_txs.len() != 0 {
+            //     println!(
+            //         "start_timestamp: {}, end_timestamp: {}",
+            //         start_timestamp, end_timestamp
+            //     );
+            // }
             return Ok(new_txs);
         } else {
             return Err(anyhow::anyhow!("err: {:#?}", res.text().await?));
@@ -212,13 +225,17 @@ pub fn calculate_profit(percent: u64, tx: CrossTxData) -> CrossTxProfit {
         maker_address: tx.source_maker,
         dealer_address: tx.dealer_address,
         profit: profit,
-        chain_id: std::env::var("MAINNET_CHAIN_ID").unwrap().parse().unwrap(),
+        chain_id: get_mainnet_chain_id(),
         token: tx.source_token,
     }
 }
 
-pub fn get_one_block_txs_hash(txs: Vec<H256>) -> H256 {
+pub fn get_one_block_txs_hash(mut txs: Vec<H256>) -> H256 {
+    if txs.is_empty() {
+        return H256::zero();
+    }
     let mut hasher = Keccak256Hasher::default();
+    txs.sort();
     for tx in txs {
         hasher.write_h256(&tx);
     }
@@ -258,25 +275,25 @@ pub mod test {
         //     }]
         // }
 
-        // let s = TxsCrawler::new(
-        //     "https://openapi2.orbiter.finance/v3/yj6toqvwh1177e1sexfy0u1pxx5j8o47".to_string(),
-        // );
-        // let end: u64 = 1694679528;
-        // let duration: u64 = 1200;
-        // let arb = 421613;
-        // let op = 420;
-        // let start = end - duration;
-        // println!("start: {}, end: {}", start, end);
-        // let a = s.request_txs(op, start, end, 0).await.unwrap();
-        // println!("a: {:?}", a);
-        // println!("len: {:?}", a.len());
-        // for tx in a {
-        //     println!("tx: {:?}", tx);
-        // }
-        //
-        // let b = convert_string_to_hash(
-        //     "0x9077dc48e3b0c857b2fac9a333321d991553544f3d3ae20a281e831b2af87e12".to_string(),
-        // );
-        // println!("b: {:?}", b);
+        let s = TxsCrawler::new(
+            "https://openapi2.orbiter.finance/v3/yj6toqvwh1177e1sexfy0u1pxx5j8o47".to_string(),
+        );
+        let end: u64 = 1695284033;
+        let duration: u64 = 7200;
+        let arb = 421613;
+        let op = 420;
+        let start = end - duration;
+        // let start = 1695023676;
+        let a = s.request_txs(op, start, end, 0).await.unwrap();
+        println!("a: {:?}", a);
+        println!("len: {:?}", a.len());
+        for tx in a {
+            println!("tx: {:?}", tx);
+        }
+
+        let b = convert_string_to_hash(
+            "0x9077dc48e3b0c857b2fac9a333321d991553544f3d3ae20a281e831b2af87e12".to_string(),
+        );
+        println!("b: {:?}", b);
     }
 }
