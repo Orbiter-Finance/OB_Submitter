@@ -199,8 +199,8 @@ impl ContractTrait for SubmitterContract {
                     //     .add_get_eth_balance(address_1, false)
                     //     .add_get_eth_balance(address_2, false);
                     // let balances: (U256, U256) = multicall.call().await?;
+                    // let s = fee_manager_contract.submissions();
 
-                    let s = fee_manager_contract.submissions();
                     let (_, endBlock, submitTimestamp, profitRoot, _) = fee_manager_contract
                         .submissions()
                         .block(block_number)
