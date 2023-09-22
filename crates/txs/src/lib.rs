@@ -11,12 +11,12 @@ use contract::SubmitterContract;
 use ethers::types::{Address, U256};
 use funcs::{calculate_profit, convert_string_to_hash, get_one_block_txs_hash};
 use primitives::{
+    chain_type::get_chain_type,
     constants::ETH_DELAY_BLOCKS,
     env::{
         get_chains_info_source_url, get_delay_seconds_by_chain_type, get_mainnet_chain_id,
         get_txs_source_url,
     },
-    chain_type::get_chain_type,
     func::{block_number_convert_to_h256, chain_token_address_convert_to_h256, tx_compare},
     traits::{Contract as ContractTrait, StataTrait},
     types::{

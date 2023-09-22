@@ -12,4 +12,10 @@ pub struct Args {
     pub debug: bool,
     #[arg(long, default_value_t = 9737252, help = "start block")]
     pub start_block: u64,
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "do not use password. can not submit root."
+    )]
+    pub no_private_key: bool,
 }

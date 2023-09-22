@@ -122,12 +122,20 @@ pub async fn run() -> Result<()> {
             .get()
             .expect("blocks state db' path not set"),
     );
-    let private_key = Password::new()
-        .with_prompt("Please enter submitter's private key")
-        .interact()?;
-    let wallet = Arc::new(LocalWallet::from_str(
-        &private_key.trim_end_matches("\n").to_string(),
-    )?);
+
+    let private_key: String;
+    if args.no_private_key {
+        event!(Level::WARN, "No private key, can not submit root.");
+        private_key =
+            "0x0000000000000000000000000000000000000000000000000000000000000001".to_string();
+    } else {
+        private_key = Password::new()
+            .with_prompt("Please enter submitter's private key")
+            .interact()?
+            .trim_end_matches("\n")
+            .to_string();
+    }
+    let wallet = Arc::new(LocalWallet::from_str(&private_key)?);
     event!(Level::INFO, "The wallet is created.");
 
     let profit_state = Arc::new(RwLock::new(
