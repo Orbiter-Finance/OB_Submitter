@@ -6,3 +6,4 @@ pub mod keccak256_hasher;
 mod tests;
 pub mod traits;
 pub mod types;
+pub mod chain_type;

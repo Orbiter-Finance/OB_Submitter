@@ -24,4 +24,5 @@ hex = "0.4.3"
 sled = "0.34.7"
 tokio.workspace = true
 ethers-providers = {git = "https://github.com/gakonst/ethers-rs.git"}
+lazy_static = "1.4.0"
 #off-chain-state = { path = "../off-chain-state"}

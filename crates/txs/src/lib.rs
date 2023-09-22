@@ -16,6 +16,7 @@ use primitives::{
         get_chains_info_source_url, get_delay_seconds_by_chain_type, get_mainnet_chain_id,
         get_txs_source_url,
     },
+    chain_type::get_chain_type,
     func::{block_number_convert_to_h256, chain_token_address_convert_to_h256, tx_compare},
     traits::{Contract as ContractTrait, StataTrait},
     types::{
@@ -251,7 +252,6 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
                     now_block_timestamp,
                 );
 
-                // todo get chain type by chain id
                 let mut new_txs: Vec<(CrossTxData, CrossTxProfit)> = Vec::new();
                 let mut count = 0;
                 let mut chain_count = 0;
@@ -262,7 +262,7 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
                             chain,
                             last_block_timestamp,
                             now_block_timestamp,
-                            get_delay_seconds_by_chain_type(ChainType::Normal),
+                            get_delay_seconds_by_chain_type(get_chain_type(chain)),
                         )
                         .await
                     {
