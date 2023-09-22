@@ -57,6 +57,8 @@ export COMMON_DELAY_SECONDS = 900
 ```angular2html
 ./target/release/submitter
 ```
+> If you don't want to be a submitter and just want to sync data, then you can use `--no-private-key` in your command line.
+> for example, `./target/release/submitter --no-private-key`
 6. view log
 ```shell
 # for example
