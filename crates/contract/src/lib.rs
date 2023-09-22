@@ -279,7 +279,6 @@ impl ContractTrait for SubmitterContract {
         Ok(transfer_los)
     }
 
-    // fixme
     async fn get_feemanager_contract_events(&self, block_number: u64) -> Result<Vec<Event>> {
         let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let fee_manager_contract =
@@ -290,13 +289,13 @@ impl ContractTrait for SubmitterContract {
             .to_block(block_number)
             .query()
             .await?;
+        // fixme
         let deposit_logs: Vec<EthdepositFilter> = fee_manager_contract
             .eth_deposit_filter()
             .from_block(block_number)
             .to_block(block_number)
             .query()
             .await?;
-        // fixme
         let mut a: Vec<Event> = vec![];
         for i in withdraw_logs {
             let user = i.user;
