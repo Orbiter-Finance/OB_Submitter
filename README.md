@@ -1,6 +1,6 @@
 # submitter
 
-## Description
+## Introduction
 
 Responsible for the profit statistics of Ethereum L2 cross-chain transactions, 
 and submits the Merkel root of the profit data to the Ethereum L1 chain. 

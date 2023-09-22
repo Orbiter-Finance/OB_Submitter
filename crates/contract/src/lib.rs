@@ -48,6 +48,17 @@ pub struct Transfer {
     value: U256,
 }
 
+// #[ethevent(name = "Withdraw")]
+// #[derive(Debug, Clone, PartialEq, ethers::contract::EthEvent)]
+// pub struct Withdraw {
+//     #[ethevent(indexed)]
+//     user: Address,
+//     chain_id: U256,
+//     #[ethevent(indexed)]
+//     token: Address,
+//     amount: U256,
+// }
+
 #[derive(Debug, Clone)]
 pub struct SubmitterContract {
     pub sender: Sender<BlockInfo>,
@@ -268,6 +279,7 @@ impl ContractTrait for SubmitterContract {
         Ok(transfer_los)
     }
 
+    // fixme
     async fn get_feemanager_contract_events(&self, block_number: u64) -> Result<Vec<Event>> {
         let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let fee_manager_contract =
@@ -284,6 +296,7 @@ impl ContractTrait for SubmitterContract {
             .to_block(block_number)
             .query()
             .await?;
+        // fixme
         let mut a: Vec<Event> = vec![];
         for i in withdraw_logs {
             let user = i.user;
@@ -326,7 +339,7 @@ impl ContractTrait for SubmitterContract {
         if storage.is_none() {
             return Ok(None);
         }
-        let mut events = self.get_feemanager_contract_events(block_number).await?;
+        let mut events: Vec<Event> = self.get_feemanager_contract_events(block_number).await?;
         let erc_transfer_events = self
             .get_erc20_transfer_events_by_tokens_id(
                 self.support_mainnet_tokens.as_ref().clone(),
