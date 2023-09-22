@@ -5,7 +5,18 @@ use std::collections::btree_map::BTreeMap;
 lazy_static! {
     pub static ref ChainsType: BTreeMap<u64, ChainType> = {
         let mut map = BTreeMap::new();
+        /// mainnet
+        // Ethereum
         map.insert(1, ChainType::Normal);
+        // Arbitrum
+        map.insert(42161, ChainType::OP);
+        // OP
+        map.insert(10, ChainType::OP);
+        // zkSync
+        map.insert(324, ChainType::ZK);
+
+        /// testnet
+        // Ethereum
         map.insert(5, ChainType::Normal);
         // op
         map.insert(420, ChainType::OP);
