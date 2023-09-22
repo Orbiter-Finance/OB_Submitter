@@ -79,8 +79,7 @@ async fn local_test() {
     let tokens: Arc<Vec<Address>> = Arc::new(vec![Address::from_str("0xa3a8a6b323e3d38f5284db9337e7c6d74af3366a").unwrap(), Address::from_str("0xa0321efeb50c46c17a7d72a52024eea7221b215a").unwrap(), Address::from_str("0x29b6a77911c1ce3b3849f28721c65dada015c768").unwrap()]);
     let contract = SubmitterContract::new(s.clone(), wallet.clone(), start_num, tokens).await;
     // 9734015
-    // 9738031
-    let block_info = contract.get_block_info(9734015).await;
+    let block_info = contract.get_block_info(9733395).await;
     match block_info {
         Ok(b) => {
             println!("block_info: {:?}", b);
