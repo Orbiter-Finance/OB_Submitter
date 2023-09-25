@@ -49,7 +49,7 @@ impl TxsCrawler {
 
     pub async fn request_txs(
         &self,
-        chain_id: u64,
+        target_chain_id: u64,
         start_timestamp: u64,
         end_timestamp: u64,
         delay_timestamp: u64,
@@ -78,7 +78,7 @@ impl TxsCrawler {
                 "jsonrpc": "2.0",
                 "method": self.method,
                 "params": [{
-                    "id": chain_id,
+                    "id": target_chain_id,
                     "timestamp": [start_timestamp, end_timestamp]
                 }]
             }))
@@ -91,13 +91,13 @@ impl TxsCrawler {
             let res: Value = serde_json::from_str(&res.text().await?)?;
             // event!(Level::INFO, "response: {:#?}", res);
             // println!("response: {:#?}", res);
-            let res: &Value = &res["result"][chain_id.to_string()];
+            let res: &Value = &res["result"][target_chain_id.to_string()];
             event!(
                 Level::INFO,
                 "start_timestamp: {}, end_timestamp: {}, chain id: {}, res: {:#?}",
                 start_timestamp,
                 end_timestamp,
-                chain_id,
+                target_chain_id,
                 res
             );
             let old_txs: Vec<CrossTxRawData> = serde_json::from_value(res.clone())?;

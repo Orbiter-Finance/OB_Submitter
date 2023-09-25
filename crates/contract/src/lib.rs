@@ -211,8 +211,7 @@ impl ContractTrait for SubmitterContract {
             submissions.clone().block(block_number).await?;
 
         let mut multicall = Multicall::new(self.client.clone(), None)
-            .await
-            .unwrap()
+            .await?
             .block(block_number);
         multicall
             .clear_calls()
