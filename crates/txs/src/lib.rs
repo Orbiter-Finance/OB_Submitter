@@ -112,6 +112,7 @@ impl Submitter {
             self.contract.clone(),
             self.start_block.clone(),
         ));
+        event!(Level::INFO, "submitter is ready.");
         std::future::pending::<()>().await;
         Ok(())
     }
