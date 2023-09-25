@@ -34,19 +34,19 @@ cargo build --release
 5. configure environment variables
 ```shell
 # Ethereum node https url
-export NETWORK_RPC_URL="https://eth-goerli.api.onfinality.io/public"
+export NETWORK_RPC_URL = "https://eth-mainnet.g.alchemy.com/v2/-e53KLekEWi1sTblk40_P9z_qr_jTHTd"
 # Ethereum network chain id
-export MAINNET_CHAIN_ID=5
+export MAINNET_CHAIN_ID=1
 
 # RFeeManager smart contract address
-export ORFeeManager_CONTRACT_ADDRESS="0xA191028bf304209a14acA85866999d8140BA54d8"
+export ORFeeManager_CONTRACT_ADDRESS="0xcC45c67d121A4BC3BC88Cc5A3099a8F7854f11f6"
 # where to get txs
-export TXS_SOURCE_URL="https://openapi2.orbiter.finance/v3/yj6toqvwh1177e1sexfy0u1pxx5j8o47"
+export TXS_SOURCE_URL="https://openapi.orbiter.finance/v3/v3/yj6toqvwh1177e1sexfy0u1pxx5j8o47"
 # Where to get chain information
-export SUPPORT_CHAINS_SOURCE_URL="https://api.studio.thegraph.com/query/49058/cabin/version/latest"
+export SUPPORT_CHAINS_SOURCE_URL="https://api.studio.thegraph.com/query/53475/dealer/version/latest"
 
 # Use directly without changing
-export START_BLOCK=9755550
+export START_BLOCK=18212105
 # Use directly without changing
 export ZK_DELAY_SECONDS=28800
 # Use directly without changing
