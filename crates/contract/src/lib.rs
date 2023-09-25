@@ -288,7 +288,7 @@ impl ContractTrait for SubmitterContract {
                     transfer_los.push(e);
                     event!(
                         Level::INFO,
-                        "Block #{:?} erc20 address: {:?}, transfer event: {:?}",
+                        "Block #{:?} erc20 contract address: {:?}, transfer event: {:?}",
                         block_number,
                         token,
                         i

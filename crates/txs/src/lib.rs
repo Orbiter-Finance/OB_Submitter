@@ -334,6 +334,11 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
                                     }
                                 };
                                 let profit = calculate_profit(percent as u64, tx.clone());
+                                event!(
+                                    Level::INFO,
+                                    "Block #{:} - dealer {:} - profit percent: {:?}",
+                                    now_block, dealer, percent,
+                                );
 
                                 new_txs.push((tx.clone(), profit.clone()));
                                 event!(
