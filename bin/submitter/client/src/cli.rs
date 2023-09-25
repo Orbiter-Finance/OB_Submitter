@@ -14,6 +14,7 @@ use jsonrpsee::{
     Methods,
 };
 use lazy_static::lazy_static;
+use primitives::env::get_start_block;
 use primitives::{
     env::get_chains_info_source_url,
     func::chain_token_address_convert_to_h256,
@@ -31,10 +32,11 @@ use std::{
 };
 use tokio::sync::OnceCell;
 use tracing::{event, Level};
-use tracing_appender::rolling::daily;
+use tracing_appender::rolling::{daily, hourly};
 use tracing_subscriber::{fmt::format, FmtSubscriber};
 use txs::rocks_db::TxsRocksDB;
 use txs::{funcs::SupportChains, Submitter};
+use utils::vec_unique;
 
 pub struct JsonRpcServer {
     pub mothods: Methods,
@@ -216,11 +218,13 @@ pub async fn run() -> Result<()> {
     event!(Level::INFO, "Rpc server start at: {:?}", addr);
     tokio::spawn(server_handle.stopped());
 
-    let start_block_num1 = Arc::new(tokio::sync::RwLock::new(args.start_block));
+    let start_block_num1 = Arc::new(tokio::sync::RwLock::new(get_start_block()));
     let (s, r) = tokio::sync::broadcast::channel::<BlockInfo>(100);
     let support_chains_crawler = SupportChains::new(get_chains_info_source_url());
-    let tokens: Arc<Vec<Address>> =
-        Arc::new(support_chains_crawler.get_mainnet_support_tokens().await?);
+    let tokens: Arc<Vec<Address>> = Arc::new(vec_unique::<Address>(
+        support_chains_crawler.get_mainnet_support_tokens().await?,
+    ));
+    println!("support tokens: {:?}", tokens.clone());
     let contract = Arc::new(
         SubmitterContract::new(
             s.clone(),
@@ -236,7 +240,7 @@ pub async fn run() -> Result<()> {
         event!(Level::INFO, "contract start");
     });
 
-    let start_block_num = Arc::new(RwLock::new(args.start_block));
+    let start_block_num = Arc::new(RwLock::new(get_start_block()));
     let submitter = Submitter::new(
         profit_state.clone(),
         blocks_state.clone(),

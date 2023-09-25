@@ -34,24 +34,25 @@ cargo build --release
 5. configure environment variables
 ```shell
 # Ethereum node https url
-export NETWORK_RPC_URL = "https://eth-goerli.api.onfinality.io/public"
+export NETWORK_RPC_URL="https://eth-goerli.api.onfinality.io/public"
 # Ethereum network chain id
-export MAINNET_CHAIN_ID = 5
+export MAINNET_CHAIN_ID=5
 
 # RFeeManager smart contract address
-export ORFeeManager_CONTRACT_ADDRESS = "0xA191028bf304209a14acA85866999d8140BA54d8"
+export ORFeeManager_CONTRACT_ADDRESS="0xA191028bf304209a14acA85866999d8140BA54d8"
 # where to get txs
-export TXS_SOURCE_URL = "https://openapi2.orbiter.finance/v3/yj6toqvwh1177e1sexfy0u1pxx5j8o47"
+export TXS_SOURCE_URL="https://openapi2.orbiter.finance/v3/yj6toqvwh1177e1sexfy0u1pxx5j8o47"
 # Where to get chain information
-export SUPPORT_CHAINS_SOURCE_URL = "https://api.studio.thegraph.com/query/49058/cabin/version/latest"
+export SUPPORT_CHAINS_SOURCE_URL="https://api.studio.thegraph.com/query/49058/cabin/version/latest"
 
-
 # Use directly without changing
-export ZK_DELAY_SECONDS = 28800
+export START_BLOCK=9755550
 # Use directly without changing
-export OP_DELAY_SECONDS = 604800
+export ZK_DELAY_SECONDS=28800
 # Use directly without changing
-export COMMON_DELAY_SECONDS = 900
+export OP_DELAY_SECONDS=604800
+# Use directly without changing
+export COMMON_DELAY_SECONDS=900
 ```
 5. run submitter
 ```angular2html

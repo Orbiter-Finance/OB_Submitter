@@ -1,6 +1,7 @@
 use thiserror::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 use crate::types::BlockInfo;
+use ethers::prelude::MulticallError;
 use ethers::{
     contract::ContractError,
     middleware::{MiddlewareError, SignerMiddleware},
@@ -34,4 +35,8 @@ pub enum Error {
     ETHContractError(#[from] ContractError<Provider<ethers_providers::Http>>),
     #[error("submit root failed")]
     SubmitRootFailed(String),
+    #[error("ethers multicall err")]
+    ETHMulticallError(
+        #[from] MulticallError<SignerMiddleware<Provider<ethers_providers::Http>, LocalWallet>>,
+    ),
 }

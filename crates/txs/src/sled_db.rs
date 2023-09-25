@@ -19,11 +19,11 @@ impl MakerProfitDB {
     pub fn insert_percent(
         &self,
         maker: Address,
-        chain_id: u64,
+        block_num: u64,
         token: Address,
         percent: u64,
     ) -> Result<()> {
-        let k = bincode::serialize(&(maker, chain_id, token))?;
+        let k = bincode::serialize(&(maker, block_num, token))?;
         let v = bincode::serialize(&percent)?;
         self.inner.insert(k, v)?;
         Ok(())
@@ -32,10 +32,10 @@ impl MakerProfitDB {
     pub fn get_percent(
         &self,
         maker: Address,
-        chain_id: u64,
+        block_num: u64,
         token: Address,
     ) -> Result<Option<u64>> {
-        let k = bincode::serialize(&(maker, chain_id, token))?;
+        let k = bincode::serialize(&(maker, block_num, token))?;
         if let Some(v) = self.inner.get(&k)? {
             return Ok(Some(bincode::deserialize::<u64>(&v)?));
         }
@@ -106,6 +106,8 @@ impl BlockTxsCountDB {
     }
 
     pub fn is_txs_completed(&self, start_block: u64, end_block: u64) -> Result<bool> {
+        // let span = tracing::span!(tracing::Level::INFO, "is_txs_completed");
+        // let _enter = span.enter();
         let mut is_completed = true;
         for i in start_block..end_block {
             let k = bincode::serialize(&i)?;

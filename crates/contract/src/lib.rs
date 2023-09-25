@@ -24,7 +24,7 @@ use primitives::{
 
 use std::{option::Option, str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::{broadcast::Sender, RwLock};
-use tracing::{event, Level};
+use tracing::{event, span, Level};
 
 abigen!(
     FeeManagerContract,
@@ -47,17 +47,6 @@ pub struct Transfer {
     to: Address,
     value: U256,
 }
-
-// #[ethevent(name = "Withdraw")]
-// #[derive(Debug, Clone, PartialEq, ethers::contract::EthEvent)]
-// pub struct Withdraw {
-//     #[ethevent(indexed)]
-//     user: Address,
-//     chain_id: U256,
-//     #[ethevent(indexed)]
-//     token: Address,
-//     amount: U256,
-// }
 
 #[derive(Debug, Clone)]
 pub struct SubmitterContract {
@@ -98,31 +87,48 @@ impl SubmitterContract {
 }
 
 pub async fn run(contract: Arc<SubmitterContract>) -> Result<()> {
-    event!(Level::INFO, "latest  block crawler is ready.",);
+    // let span = span!(Level::INFO, "run");
+    // let _enter = span.enter();
+    event!(Level::INFO, "latest block crawler is ready.",);
+    let mut block_num = 0;
     loop {
         if let Ok(block) = contract.provider.get_block_number().await {
             let mut w = contract.now_block_num.write().await;
-            let block_num = block.as_u64();
+            if block.as_u64() == block_num {
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                continue;
+            }
+            block_num = block.as_u64();
+
             if *w != block_num {
                 if let Ok(Some(storage)) = contract.get_block_storage(block_num).await {
                     let b = BlockInfo {
                         storage,
                         events: vec![],
                     };
-                    if contract.sender.send(b).is_ok() {
-                        event!(
-                            Level::INFO,
-                            "send newest block {:?} info success.",
-                            block_num
-                        );
-                        *w = block_num;
-                    } else {
-                        event!(Level::WARN, "send newest block {:?} info fail.", block_num);
+                    match contract.sender.send(b.clone()) {
+                        Ok(_) => {
+                            event!(
+                                Level::INFO,
+                                "send newest block #{:?} info:{:?} success.",
+                                block_num,
+                                serde_json::to_string(&b.clone()).unwrap(),
+                            );
+                            *w = block_num;
+                        }
+                        Err(e) => {
+                            event!(
+                                Level::WARN,
+                                "send newest block #{:?} info fail. error: {:?}",
+                                block_num,
+                                e
+                            );
+                        }
                     }
                 }
             }
 
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            tokio::time::sleep(Duration::from_secs(10)).await;
         }
     }
     Ok(())
@@ -137,22 +143,27 @@ impl ContractTrait for SubmitterContract {
         profit_root: [u8; 32],
         blocks_root: [u8; 32],
     ) -> Result<H256> {
-        let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
-        let fee_manager_contract =
-            FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));
+        // let span = span!(Level::INFO, "submit_root");
+        // let _enter = span.enter();
+        event!(
+            Level::INFO,
+            "submit root to contract: {:?}",
+            get_fee_manager_contract_address(),
+        );
+        let fee_manager_contract = FeeManagerContract::new(
+            get_fee_manager_contract_address(),
+            Arc::new(self.client.clone()),
+        );
 
-        let s: FunctionCall<
-            Arc<SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>>,
-            SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>,
-            (),
-        > = fee_manager_contract
+        let res: Option<TransactionReceipt> = fee_manager_contract
             .submit(start, end, profit_root, blocks_root)
-            .gas(2000000);
-        let res: Option<TransactionReceipt> = s.send().await?.await?;
+            .gas(2000000)
+            .send()
+            .await?
+            .await?;
 
         match res {
             None => {
-                event!(Level::INFO, "submit root fail.");
                 return Err(LocalError::SubmitRootFailed(
                     "transaction receipt is none".to_string(),
                 ));
@@ -160,20 +171,13 @@ impl ContractTrait for SubmitterContract {
             Some(tr) => {
                 if let Some(status) = tr.status {
                     if status == 0.into() {
-                        event!(Level::INFO, "submit root fail.");
                         return Err(LocalError::SubmitRootFailed(
                             "transaction receipt status is 0".to_string(),
                         ));
                     } else {
-                        event!(
-                            Level::INFO,
-                            "submit root success. tx hash: {:?}",
-                            tr.transaction_hash
-                        );
                         return Ok(tr.transaction_hash);
                     }
                 } else {
-                    event!(Level::INFO, "submit root fail.");
                     return Err(LocalError::SubmitRootFailed(
                         "transaction receipt is none".to_string(),
                     ));
@@ -183,55 +187,64 @@ impl ContractTrait for SubmitterContract {
     }
 
     async fn get_block_storage(&self, block_number: u64) -> Result<Option<BlockStorage>> {
-        let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
-        let fee_manager_contract =
-            FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));
+        // let span = span!(Level::INFO, "get_block_storage");
+        // let _enter = span.enter();
+        let fee_manager_contract = FeeManagerContract::new(
+            get_fee_manager_contract_address(),
+            Arc::new(self.client.clone()),
+        );
         let mut block_storage: Option<BlockStorage> = None;
 
-        if let Ok(block_info) = self.provider.get_block(block_number).await {
-            match block_info {
-                None => {}
-                Some(b) => {
-                    let duration_check: FunctionCall<
-                        Arc<SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>>,
-                        SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>,
-                        u8,
-                    > = fee_manager_contract.duration_check().block(block_number);
-                    let duration = duration_check.await?;
+        let duration_check: FunctionCall<
+            Arc<SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>>,
+            SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>,
+            u8,
+        > = fee_manager_contract.duration_check().block(block_number);
+        let duration = duration_check.clone().await?;
 
-                    // fixme
-                    // let first_call = fee_manager_contract.method::<_, String>("getValue", ()).unwrap();
-                    // let mut multicall = Multicall::new(self.client.clone(), None).await.unwrap();
-                    // multicall.add_call(first_call, false);
-                    // let results = multicall.call().await.unwrap();
-                    // let tx_receipt = multicall.send().await?.await.expect("tx dropped");
-                    // multicall
-                    //     .clear_calls()
-                    //     .add_get_eth_balance(address_1, false)
-                    //     .add_get_eth_balance(address_2, false);
-                    // let balances: (U256, U256) = multicall.call().await?;
-                    // let s = fee_manager_contract.submissions();
+        let submissions: FunctionCall<
+            Arc<SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>>,
+            SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>,
+            (u64, u64, u64, [u8; 32], [u8; 32]),
+        > = fee_manager_contract.submissions().block(block_number);
+        let (startBlock, endBlock, submitTimestamp, profitRoot, _) =
+            submissions.clone().block(block_number).await?;
 
-                    let (_, endBlock, submitTimestamp, profitRoot, _) = fee_manager_contract
-                        .submissions()
-                        .block(block_number)
-                        .await?;
-                    let duration = match duration {
-                        0 => FeeManagerDuration::Lock,
-                        1 => FeeManagerDuration::Challenge,
-                        _ => FeeManagerDuration::Withdraw,
-                    };
-                    block_storage = Some(BlockStorage {
-                        duration,
-                        last_update_block: endBlock,
-                        last_submit_timestamp: submitTimestamp,
-                        block_timestamp: b.timestamp.as_u64(),
-                        block_number,
-                        profit_root: profitRoot,
-                    });
-                }
-            }
-        }
+        let mut multicall = Multicall::new(self.client.clone(), None)
+            .await
+            .unwrap()
+            .block(block_number);
+        multicall
+            .clear_calls()
+            .add_get_current_block_timestamp()
+            .add_call(duration_check, false)
+            .add_call(submissions, false);
+        let (timestamp, duration, (startBlock, endBlock, submitTimestamp, profitRoot, _)): (
+            u64,
+            u8,
+            (u64, u64, u64, [u8; 32], [u8; 32]),
+        ) = multicall.call().await?;
+
+        let duration = match duration {
+            0 => FeeManagerDuration::Lock,
+            1 => FeeManagerDuration::Challenge,
+            _ => FeeManagerDuration::Withdraw,
+        };
+        block_storage = Some(BlockStorage {
+            duration,
+            last_start_block: startBlock,
+            last_update_block: endBlock,
+            last_submit_timestamp: submitTimestamp,
+            block_timestamp: timestamp,
+            block_number,
+            profit_root: profitRoot,
+        });
+        event!(
+            Level::INFO,
+            "Block #{:?} storage: {:?}",
+            block_number,
+            serde_json::to_string(&block_storage).unwrap(),
+        );
         Ok(block_storage)
     }
 
@@ -240,6 +253,8 @@ impl ContractTrait for SubmitterContract {
         tokens: Vec<H160>,
         block_number: u64,
     ) -> Result<Vec<Event>> {
+        // let span = span!(Level::INFO, "get_erc20_transfer_events_by_tokens_id");
+        // let _enter = span.enter();
         if tokens.is_empty() {
             return Ok(vec![]);
         }
@@ -265,13 +280,20 @@ impl ContractTrait for SubmitterContract {
                     let user = i.from;
                     let token = token;
                     let amount = i.value;
-                    transfer_los.push(Event::Deposit(DepositEvent {
+                    let e = Event::Deposit(DepositEvent {
                         address: user,
                         chain_id: get_mainnet_chain_id(),
                         token_address: token,
                         balance: amount,
-                    }));
-                    event!(Level::INFO, "Block #{:?} erc20 log: {:?}", block_number, i);
+                    });
+                    transfer_los.push(e);
+                    event!(
+                        Level::INFO,
+                        "Block #{:?} erc20 address: {:?}, transfer event: {:?}",
+                        block_number,
+                        token,
+                        i
+                    );
                 }
             }
         }
@@ -280,16 +302,18 @@ impl ContractTrait for SubmitterContract {
     }
 
     async fn get_feemanager_contract_events(&self, block_number: u64) -> Result<Vec<Event>> {
-        let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
-        let fee_manager_contract =
-            FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));
+        // let span = span!(Level::INFO, "get_feemanager_contract_events");
+        // let _enter = span.enter();
+        let fee_manager_contract = FeeManagerContract::new(
+            get_fee_manager_contract_address(),
+            Arc::new(self.client.clone()),
+        );
         let withdraw_logs: Vec<WithdrawFilter> = fee_manager_contract
             .withdraw_filter()
             .from_block(block_number)
             .to_block(block_number)
             .query()
             .await?;
-        // fixme
         let deposit_logs: Vec<EthdepositFilter> = fee_manager_contract
             .eth_deposit_filter()
             .from_block(block_number)
@@ -298,6 +322,13 @@ impl ContractTrait for SubmitterContract {
             .await?;
         let mut a: Vec<Event> = vec![];
         for i in withdraw_logs {
+            event!(
+                Level::INFO,
+                "Block #{:?} fee-manager contract {:?} withdraw event: {:?}",
+                block_number,
+                get_fee_manager_contract_address(),
+                i.clone(),
+            );
             let user = i.user;
             let chain_id = i.chain_id;
             let token = i.token;
@@ -311,6 +342,13 @@ impl ContractTrait for SubmitterContract {
         }
 
         for i in deposit_logs {
+            event!(
+                Level::INFO,
+                "Block #{:?} fee-manager contract {:?} deposit event: {:?}",
+                block_number,
+                get_fee_manager_contract_address(),
+                i.clone(),
+            );
             let user = i.sender;
             let amount = i.amount;
 
@@ -321,19 +359,13 @@ impl ContractTrait for SubmitterContract {
                 balance: amount,
             }));
         }
-        if !a.is_empty() {
-            event!(
-                Level::INFO,
-                "Block #{:?} logs: {:?}",
-                block_number,
-                a.clone()
-            );
-        }
 
         Ok(a)
     }
 
     async fn get_block_info(&self, block_number: u64) -> Result<Option<BlockInfo>> {
+        // let span = span!(Level::INFO, "get_block_info");
+        // let _enter = span.enter();
         let storage = self.get_block_storage(block_number).await?;
         if storage.is_none() {
             return Ok(None);
@@ -346,30 +378,43 @@ impl ContractTrait for SubmitterContract {
             )
             .await?;
         events.extend(erc_transfer_events);
-        for i in events.clone() {
-            println!("get event: {:?}", i);
-        }
         let b = BlockInfo {
             storage: storage.unwrap(),
             events,
         };
+        event!(
+            Level::INFO,
+            "Block #{:?} info: {:?}",
+            block_number,
+            serde_json::to_string(&b.clone()).unwrap(),
+        );
         Ok(Some(b))
     }
 
-    async fn get_maker_profit_percent_by_block(
+    async fn get_dealer_profit_percent_by_block(
         &self,
-        maker: Address,
+        dealer: Address,
         block_number: u64,
         _token_chian_id: u64,
         _token_id: Address,
     ) -> Result<u64> {
+        // let span = span!(Level::INFO, "get_dealer_profit_percent_by_block");
+        // let _enter = span.enter();
         let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let fee_manager_contract =
             FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));
         let info = fee_manager_contract
-            .get_dealer_info(maker)
+            .get_dealer_info(dealer)
             .block(block_number)
             .await?;
-        Ok(info.fee_ratio.as_u64())
+        let r = info.fee_ratio.as_u64();
+        event!(
+            Level::INFO,
+            "Block #{:?} dealer: {:?}, profit percent: {:?}",
+            block_number,
+            dealer,
+            r,
+        );
+        Ok(r)
     }
 }

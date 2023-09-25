@@ -10,8 +10,8 @@ pub struct Args {
     pub db_path: String,
     #[arg(long, default_value_t = false, help = "debug mode")]
     pub debug: bool,
-    #[arg(long, default_value_t = 9738685, help = "start block")]
-    pub start_block: u64,
+    // #[arg(long, default_value_t = 9754418, help = "start block")]
+    // pub start_block: u64,
     #[arg(
         long,
         default_value_t = false,

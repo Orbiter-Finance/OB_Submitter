@@ -22,5 +22,6 @@ ethers.workspace = true
 anyhow = "1.0.75"
 tracing.workspace = true
 contract = { path = "../contract"}
+utils = { path = "../utils"}
 rust_decimal = "1.32.0"
 hex = "0.4.3"

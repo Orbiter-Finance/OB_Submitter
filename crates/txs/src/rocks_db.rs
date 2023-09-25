@@ -28,7 +28,7 @@ impl TxsRocksDB {
         Ok(())
     }
 
-    pub fn get_profit_by_yx_hash(&self, tx_hash: H256) -> Result<Option<CrossTxProfit>> {
+    pub fn get_profit_by_tx_hash(&self, tx_hash: H256) -> Result<Option<CrossTxProfit>> {
         let lower_bound = CrossTxData {
             target_time: 0u64,
             target_chain: 0u64,
@@ -89,13 +89,7 @@ impl TxsRocksDB {
         for (key, value) in iter {
             let k: CrossTxData = bincode::deserialize(&key)?;
             let v: CrossTxProfit = bincode::deserialize(&value)?;
-            // println!(
-            //     "start_timestamp: {}, end_timestamp: {}",
-            //     start_timestamp, end_timestamp
-            // );
-            // println!("tx timestamp: {:?}", k.target_time);
             if k.target_time != end_timestamp {
-                println!("key: {:?}, value: {:?}", k, v);
                 txs.push((k, v));
             }
         }

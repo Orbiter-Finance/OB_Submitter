@@ -54,6 +54,8 @@ impl TxsCrawler {
         end_timestamp: u64,
         delay_timestamp: u64,
     ) -> anyhow::Result<Vec<CrossTxRawData>> {
+        // let  span = tracing::span!(tracing::Level::INFO, "request_txs");
+        // let _enter = span.enter();
         let start_timestamp =
             start_timestamp
                 .checked_sub(delay_timestamp)
@@ -90,21 +92,23 @@ impl TxsCrawler {
             // event!(Level::INFO, "response: {:#?}", res);
             // println!("response: {:#?}", res);
             let res: &Value = &res["result"][chain_id.to_string()];
+            event!(
+                Level::INFO,
+                "start_timestamp: {}, end_timestamp: {}, chain id: {}, res: {:#?}",
+                start_timestamp,
+                end_timestamp,
+                chain_id,
+                res
+            );
             let old_txs: Vec<CrossTxRawData> = serde_json::from_value(res.clone())?;
             let mut new_txs: Vec<CrossTxRawData> = vec![];
             for tx in old_txs {
-                println!("tx: {:?}", tx);
+                // todo check source_time
                 event!(Level::INFO, "tx: {:?}", tx);
                 let mut tx = tx;
                 tx.target_time = tx.target_time + delay_timestamp * 1000;
                 new_txs.push(tx);
             }
-            // if new_txs.len() != 0 {
-            //     println!(
-            //         "start_timestamp: {}, end_timestamp: {}",
-            //         start_timestamp, end_timestamp
-            //     );
-            // }
             return Ok(new_txs);
         } else {
             return Err(anyhow::anyhow!("err: {:#?}", res.text().await?));
@@ -169,7 +173,7 @@ impl SupportChains {
 
                 if token != Address::zero() {
                     tokens.push(token);
-                    println!("token: {:?}", token);
+                    // println!("token: {:?}", token);
                 }
             }
         } else {
@@ -212,6 +216,8 @@ impl SupportChains {
 }
 
 pub fn calculate_profit(percent: u64, tx: CrossTxData) -> CrossTxProfit {
+    // let span = tracing::span!(tracing::Level::INFO, "calculate_profit");
+    // let _enter = span.enter();
     let profit = tx.profit;
     let profit = profit * U256::from(percent) / U256::from(100_0000);
     event!(

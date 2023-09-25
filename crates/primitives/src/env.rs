@@ -9,6 +9,10 @@ pub fn get_mainnet_chain_id() -> u64 {
     std::env::var("MAINNET_CHAIN_ID").unwrap().parse().unwrap()
 }
 
+pub fn get_start_block() -> u64 {
+    std::env::var("START_BLOCK").unwrap().parse().unwrap()
+}
+
 pub fn get_fee_manager_contract_address() -> Address {
     std::env::var("ORFeeManager_CONTRACT_ADDRESS")
         .unwrap()

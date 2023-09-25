@@ -79,6 +79,15 @@ pub fn get_no1_merge_value(
     }
 }
 
+pub fn vec_unique<D>(mut v: Vec<D>) -> Vec<D>
+where
+    D: PartialEq + std::cmp::Ord,
+{
+    v.sort();
+    v.dedup();
+    v
+}
+
 #[test]
 fn test() {
     let a: H256 = [
@@ -90,4 +99,8 @@ fn test() {
     let mut s: SMTBitMap = a.into();
     s.reverse().unwrap();
     println!("{:?}", s.0);
+
+    let v = vec![1, 5, 5, 3, 4, 5, 6, 7, 8];
+    let v = vec_u64_unique(v);
+    println!("{:?}", v);
 }

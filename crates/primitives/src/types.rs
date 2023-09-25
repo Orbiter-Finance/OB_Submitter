@@ -280,7 +280,7 @@ pub struct CrossTxData {
     pub target_address: Address,
     pub target_amount: String,
     pub target_chain: u64,
-    // tx_hash
+    // tx hash
     pub target_id: H256,
     pub target_maker: Option<Address>,
     pub target_symbol: String,
@@ -388,13 +388,16 @@ impl Default for FeeManagerDuration {
     }
 }
 
+#[serde_as]
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct BlockStorage {
     pub duration: FeeManagerDuration,
+    pub last_start_block: u64,
     pub last_update_block: u64,
     pub last_submit_timestamp: u64,
     pub block_timestamp: u64,
     pub block_number: u64,
+    #[serde_as(as = "serde_with::hex::Hex")]
     pub profit_root: [u8; 32],
 }
 

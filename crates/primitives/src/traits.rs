@@ -88,7 +88,7 @@ pub trait Contract {
         tokens: Vec<Address>,
         block_number: u64,
     ) -> Result<Vec<Event>>;
-    async fn get_maker_profit_percent_by_block(
+    async fn get_dealer_profit_percent_by_block(
         &self,
         maker: Address,
         block_number: u64,
