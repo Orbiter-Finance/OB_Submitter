@@ -27,7 +27,7 @@ sudo apt install clang llvm
 
 4. build submitter
 ```angular2html
-git clone https://github.com/YanOctavian/submitter.git
+git clone https://github.com/Orbiter-Finance/OB_Submitter.git 
 cd submitter
 cargo build --release
 ```
