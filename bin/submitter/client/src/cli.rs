@@ -13,6 +13,7 @@ use jsonrpsee::{
     server::{Server, ServerBuilder, ServerHandle},
     Methods,
 };
+use tracing_subscriber::fmt::time;
 use lazy_static::lazy_static;
 use primitives::env::get_start_block;
 use primitives::{
@@ -104,6 +105,7 @@ pub async fn run() -> Result<()> {
     tracing_subscriber::fmt()
         .with_writer(file_appender)
         .with_max_level(Level::INFO)
+        // .with_timer(Builder::default().with_tz(Utc::now().with_timezone(&chrono::FixedOffset::east(8 * 3600))))
         .init();
     event!(
         Level::INFO,
