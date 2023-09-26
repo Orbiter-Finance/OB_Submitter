@@ -9,6 +9,8 @@ pub mod sled_db;
 use crate::funcs::{SupportChains, TxsCrawler};
 use contract::SubmitterContract;
 use ethers::types::{Address, U256};
+use primitives::error::Error;
+
 use funcs::{calculate_profit, convert_string_to_hash, get_one_block_txs_hash};
 use hex;
 use primitives::{
@@ -409,6 +411,7 @@ async fn submit_root(
 
     let mut newest_block_info = BlockInfo::default();
     let mut now_block_num = 0;
+    let mut submit_root_block_num = 0;
     {
         now_block_num = start_block.read().unwrap().clone();
     }
@@ -416,6 +419,9 @@ async fn submit_root(
     loop {
         {
             if let Ok(info) = newest_block_receiver.recv().await {
+                if submit_root_block_num >= info.storage.block_number {
+                    continue;
+                }
                 newest_block_info = info
             }
         }
@@ -632,13 +638,25 @@ async fn submit_root(
             )
             .await
         {
-            Ok(hash) => {
-                event!(Level::INFO, "submit root hash: {:?}", hash);
+            Ok(r) => {
+                event!(Level::INFO, "Block #{:?}, submit root hash: {:?}", r.1, r.0);
+                if let Some(s) = r.1 {
+                    submit_root_block_num = s.as_u64();
+                }
             }
             Err(e) => {
-                event!(Level::WARN, "submit root err: {:?}", e,);
+                event!(Level::WARN, "submit root err: {:?}", e);
+                match e {
+                    Error::SubmitRootFailed(err, b) => {
+                        if let Some(s) = b {
+                            submit_root_block_num = s.as_u64();
+                        }
+                    }
+                    _ => {},
+                }
             }
         }
+        tokio::time::sleep(Duration::from_secs(12)).await;
     }
 }
 

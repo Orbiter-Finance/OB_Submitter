@@ -9,6 +9,7 @@ use ethers::{
     providers::{Provider, ProviderError},
 };
 use sled;
+use ethers::types::U64;
 use tokio::sync::broadcast::error::{RecvError, SendError};
 /// The error type for state.
 #[derive(Error, Debug)]
@@ -34,7 +35,7 @@ pub enum Error {
     #[error("ethers contract error")]
     ETHContractError(#[from] ContractError<Provider<ethers_providers::Http>>),
     #[error("submit root failed")]
-    SubmitRootFailed(String),
+    SubmitRootFailed(String, Option<U64>),
     #[error("ethers multicall err")]
     ETHMulticallError(
         #[from] MulticallError<SignerMiddleware<Provider<ethers_providers::Http>, LocalWallet>>,

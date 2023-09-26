@@ -2,6 +2,7 @@ use crate::types::{
     BlockInfo, BlockStorage, BlocksStateData, CrossTxProfit, Event, ProfitProof, ProfitStateData,
     ProfitStateDataForRpc,
 };
+use ethers::types::U64;
 use async_trait::async_trait;
 use ethers::types::{Address, U256};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
@@ -79,7 +80,7 @@ pub trait Contract {
         end: u64,
         root: [u8; 32],
         blocks_root: [u8; 32],
-    ) -> Result<ethers::types::H256>;
+    ) -> Result<(ethers::types::H256, Option<U64>)>;
     async fn get_block_info(&self, block_number: u64) -> Result<Option<BlockInfo>>;
     async fn get_block_storage(&self, block_number: u64) -> Result<Option<BlockStorage>>;
     async fn get_feemanager_contract_events(&self, block_number: u64) -> Result<Vec<Event>>;

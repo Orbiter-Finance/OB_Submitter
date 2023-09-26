@@ -23,6 +23,7 @@ use primitives::{
 };
 
 use std::{option::Option, str::FromStr, sync::Arc, time::Duration};
+use ethers::types::U64;
 use tokio::sync::{broadcast::Sender, RwLock};
 use tracing::{event, span, Level};
 
@@ -142,7 +143,7 @@ impl ContractTrait for SubmitterContract {
         end: u64,
         profit_root: [u8; 32],
         blocks_root: [u8; 32],
-    ) -> Result<H256> {
+    ) -> Result<(H256, Option<U64>)> {
         // let span = span!(Level::INFO, "submit_root");
         // let _enter = span.enter();
         event!(
@@ -166,6 +167,7 @@ impl ContractTrait for SubmitterContract {
             None => {
                 return Err(LocalError::SubmitRootFailed(
                     "transaction receipt is none".to_string(),
+                    None,
                 ));
             }
             Some(tr) => {
@@ -173,13 +175,15 @@ impl ContractTrait for SubmitterContract {
                     if status == 0.into() {
                         return Err(LocalError::SubmitRootFailed(
                             "transaction receipt status is 0".to_string(),
+                            tr.block_number
                         ));
                     } else {
-                        return Ok(tr.transaction_hash);
+                        return Ok((tr.transaction_hash, tr.block_number));
                     }
                 } else {
                     return Err(LocalError::SubmitRootFailed(
                         "transaction receipt is none".to_string(),
+                        tr.block_number,
                     ));
                 }
             }
