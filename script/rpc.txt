@@ -25,3 +25,5 @@ curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method
 curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getProfitInfo","params":{"user": "0xc3C7A782dda00a8E61Cb9Ba0ea8680bb3f3B9d10", "tokens": [[1, "0x0000000000000000000000000000000000000022"]]},"id":1}' http://127.0.0.1:50001
 curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"submitter_getProfitProof","params":{"user": "0xc3C7A782dda00a8E61Cb9Ba0ea8680bb3f3B9d10", "tokens": [[1, "0x0000000000000000000000000000000000000022"]]},"id":1}' http://127.0.0.1:50001
 curl -v -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"debug_clearState","params":{},"id":1}' http://localhost:50001
+
+http://ec2-54-178-128-164.ap-northeast-1.compute.amazonaws.com:9009/?dealerId=0xD6Cec62CE67E09b240B84A3FB53cC1EbA05795d6&source=Arbitrum%28G%29&dest=Optimism%28G%29

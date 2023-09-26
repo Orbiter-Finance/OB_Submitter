@@ -639,13 +639,13 @@ async fn submit_root(
             .await
         {
             Ok(r) => {
-                event!(Level::INFO, "Block #{:?}, submit root hash: {:?}", r.1, r.0);
+                event!(Level::INFO, "Block #{:?}, submit root hash: {:?}", newest_block_info.storage.block_number, r);
                 if let Some(s) = r.1 {
                     submit_root_block_num = s.as_u64();
                 }
             }
             Err(e) => {
-                event!(Level::WARN, "submit root err: {:?}", e);
+                event!(Level::WARN, "Block #{:?}, submit root err: {:?}", newest_block_info.storage.block_number, e);
                 match e {
                     Error::SubmitRootFailed(err, b) => {
                         if let Some(s) = b {
