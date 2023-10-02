@@ -129,80 +129,97 @@ async fn crawl_block_info(
     // let span = span!(Level::INFO, "crawl_block_info");
     // let _enter = span.enter();
     let block_info_db = ContractBlockInfoDB::new(sled_db.clone())?;
-    let mut now_block = 0u64;
+    let mut from_block = 0u64;
     {
-        now_block = start_block.read().unwrap().clone();
+        from_block = start_block.read().unwrap().clone();
     }
-    if now_block == 0 {
+    if from_block == 0 {
         unreachable!()
     } else {
-        now_block = now_block.saturating_sub(1);
+        from_block = from_block.saturating_sub(1);
     }
+
     event!(Level::INFO, "block info crawler is ready.");
+
     let profit_statistic_db = ProfitStatisticsDB::new(sled_db.clone())?;
     let user_tokens_db = UserTokensDB::new(sled_db.clone())?;
     loop {
         if let Ok(newest_block) = newest_block_receiver.recv().await {
-            while now_block <= newest_block.storage.block_number - ETH_DELAY_BLOCKS {
-                if block_info_db.get_block_info(now_block)?.is_none() {
-                    match contract.get_block_info(now_block).await {
-                        Ok(Some(now_block_info)) => {
-                            block_info_db.insert_block_info(
-                                now_block_info.storage.block_number,
-                                now_block_info.clone(),
-                            )?;
+            let end_block = newest_block.storage.block_number - ETH_DELAY_BLOCKS;
+            while from_block <= end_block {
+                // Filter saved block
+                if block_info_db.get_block_info(from_block)?.is_some() {
+                    from_block += 1;
+                    continue;
+                }
 
-                            event!(
-                                Level::INFO,
-                                "Block #{:} info is saved.",
-                                now_block_info.storage.block_number,
-                            );
-                            for e in now_block_info.events {
-                                match e {
-                                    Event::Withdraw(w_e) => {
-                                        user_tokens_db.insert_token(
-                                            w_e.address,
-                                            w_e.chain_id,
-                                            w_e.token_address,
-                                        )?;
-                                        profit_statistic_db.update_total_withdraw(
-                                            w_e.address,
-                                            w_e.chain_id,
-                                            w_e.token_address,
-                                            w_e.balance,
-                                        )?;
-                                    }
-                                    Event::Deposit(d_e) => {
-                                        user_tokens_db.insert_token(
-                                            d_e.address,
-                                            d_e.chain_id,
-                                            d_e.token_address,
-                                        )?;
-                                        profit_statistic_db.update_total_deposit(
-                                            d_e.address,
-                                            d_e.chain_id,
-                                            d_e.token_address,
-                                            d_e.balance,
-                                        )?;
-                                    }
-                                }
+                let to_block = min(from_block + 10, end_block);
+
+                let result = contract.get_block_infos(from_block, to_block).await;
+                if result.is_err() {
+                    event!(
+                        Level::WARN,
+                        "Block #{:?} - #{:?} get block info err: {:?}",
+                        from_block,
+                        to_block,
+                        result.unwrap_err()
+                    );
+                    continue;
+                }
+
+                let block_infos = result.unwrap();
+                if block_infos.len() == 0 {
+                    event!(
+                        Level::WARN,
+                        "Block #{:?} - #{:?} get block empty.",
+                        from_block,
+                        to_block,
+                    );
+                    continue;
+                }
+
+                for bi in block_infos {
+                    block_info_db.insert_block_info(bi.storage.block_number, bi.clone())?;
+
+                    event!(
+                        Level::INFO,
+                        "Block #{:} info is saved.",
+                        bi.storage.block_number,
+                    );
+
+                    for e in bi.events {
+                        match e {
+                            Event::Withdraw(w_e) => {
+                                user_tokens_db.insert_token(
+                                    w_e.address,
+                                    w_e.chain_id,
+                                    w_e.token_address,
+                                )?;
+                                profit_statistic_db.update_total_withdraw(
+                                    w_e.address,
+                                    w_e.chain_id,
+                                    w_e.token_address,
+                                    w_e.balance,
+                                )?;
                             }
-                        }
-                        Err(e) => {
-                            event!(
-                                Level::WARN,
-                                "Block #{:?} - get block info err: {:?}",
-                                now_block,
-                                e,
-                            );
-                            continue;
-                        }
-                        _ => {
-                            continue;
+                            Event::Deposit(d_e) => {
+                                user_tokens_db.insert_token(
+                                    d_e.address,
+                                    d_e.chain_id,
+                                    d_e.token_address,
+                                )?;
+                                profit_statistic_db.update_total_deposit(
+                                    d_e.address,
+                                    d_e.chain_id,
+                                    d_e.token_address,
+                                    d_e.balance,
+                                )?;
+                            }
                         }
                     }
                 }
-                now_block += 1;
+
+                from_block = to_block + 1;
             }
         }
     }
@@ -219,17 +236,14 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
     // let _enter = span.enter();
     let block_info_db = ContractBlockInfoDB::new(sled_db.clone())?;
     let block_txs_count_db = BlockTxsCountDB::new(sled_db.clone())?;
-    let mut now_block = 0;
-    {
-        now_block = start_block.read().unwrap().clone();
-    }
+    let mut now_block = start_block.read().unwrap().clone();
 
     if now_block == 0 {
         unreachable!()
     }
 
     let maker_profit_db = MakerProfitDB::new(sled_db.clone())?;
-    let mut support_chains: Vec<u64> = vec_unique(
+    let support_chains: Vec<u64> = vec_unique(
         SupportChains::new(get_chains_info_source_url())
             .get_support_chains()
             .await?,
@@ -259,13 +273,13 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
                 while chain_count < support_chains.len() {
                     let chain = support_chains[chain_count];
                     event!(
-                    Level::INFO,
-                    "Block #{:}, crawling txs. chain id :{:?}, start_timestamp: {:?}, end_timestamp: {:?} ",
-                    now_block_info.storage.block_number,
+                        Level::INFO,
+                        "Block #{:}, crawling txs. chain id :{:?}, start_timestamp: {:?}, end_timestamp: {:?} ",
+                        now_block_info.storage.block_number,
                         chain,
-                    last_block_timestamp,
-                    now_block_timestamp,
-                );
+                        last_block_timestamp,
+                        now_block_timestamp,
+                    );
                     match TxsCrawler::new(get_txs_source_url())
                         .request_txs(
                             chain,
@@ -340,7 +354,9 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
                                 event!(
                                     Level::INFO,
                                     "Block #{:} - dealer {:} - profit percent: {:?}",
-                                    now_block, dealer, percent,
+                                    now_block,
+                                    dealer,
+                                    percent,
                                 );
 
                                 new_txs.push((tx.clone(), profit.clone()));
@@ -425,11 +441,11 @@ async fn submit_root(
                 newest_block_info = info
             }
         }
-        let is_chilled =
-            newest_block_info.clone().storage.duration == FeeManagerDuration::default();
-        if !is_chilled {
+
+        if newest_block_info.clone().storage.duration != FeeManagerDuration::default() {
             continue;
         }
+
         let trusted_block_num = newest_block_info.storage.block_number - ETH_DELAY_BLOCKS;
         event!(
             Level::INFO,
@@ -639,20 +655,30 @@ async fn submit_root(
             .await
         {
             Ok(r) => {
-                event!(Level::INFO, "Block #{:?}, submit root hash: {:?}", newest_block_info.storage.block_number, r);
+                event!(
+                    Level::INFO,
+                    "Block #{:?}, submit root hash: {:?}",
+                    newest_block_info.storage.block_number,
+                    r
+                );
                 if let Some(s) = r.1 {
                     submit_root_block_num = s.as_u64();
                 }
             }
             Err(e) => {
-                event!(Level::WARN, "Block #{:?}, submit root err: {:?}", newest_block_info.storage.block_number, e);
+                event!(
+                    Level::WARN,
+                    "Block #{:?}, submit root err: {:?}",
+                    newest_block_info.storage.block_number,
+                    e
+                );
                 match e {
                     Error::SubmitRootFailed(err, b) => {
                         if let Some(s) = b {
                             submit_root_block_num = s.as_u64();
                         }
                     }
-                    _ => {},
+                    _ => {}
                 }
             }
         }

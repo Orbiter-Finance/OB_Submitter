@@ -4,16 +4,11 @@ use super::{
 };
 use anyhow::Result;
 use clap::Parser;
-use clokwerk::{Scheduler, TimeUnits};
 use contract::{run as contract_run, SubmitterContract};
 use dialoguer::Password;
 use dotenv::dotenv;
 use ethers::{prelude::*, signers::LocalWallet};
-use jsonrpsee::{
-    server::{Server, ServerBuilder, ServerHandle},
-    Methods,
-};
-use tracing_subscriber::fmt::time;
+use jsonrpsee::{server::ServerBuilder, Methods};
 use lazy_static::lazy_static;
 use primitives::env::get_start_block;
 use primitives::{
@@ -23,18 +18,14 @@ use primitives::{
     types::{BlockInfo, BlocksStateData, ProfitStateData},
 };
 use sled;
-use state::{
-    data_example::Data as DataExample, Keccak256Hasher, Open, OptimisticTransactionDB, State, H256,
-};
+use state::{Keccak256Hasher, Open, OptimisticTransactionDB, State, H256};
 use std::{
-    env,
     str::FromStr,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 use tokio::sync::OnceCell;
 use tracing::{event, Level};
-use tracing_appender::rolling::{daily, hourly};
-use tracing_subscriber::{fmt::format, FmtSubscriber};
+use tracing_appender::rolling::daily;
 use txs::rocks_db::TxsRocksDB;
 use txs::{funcs::SupportChains, Submitter};
 use utils::vec_unique;
@@ -221,7 +212,7 @@ pub async fn run() -> Result<()> {
     tokio::spawn(server_handle.stopped());
 
     let start_block_num1 = Arc::new(tokio::sync::RwLock::new(get_start_block()));
-    let (s, r) = tokio::sync::broadcast::channel::<BlockInfo>(100);
+    let (s, _r) = tokio::sync::broadcast::channel::<BlockInfo>(100);
     let support_chains_crawler = SupportChains::new(get_chains_info_source_url());
     let tokens: Arc<Vec<Address>> = Arc::new(vec_unique::<Address>(
         support_chains_crawler.get_mainnet_support_tokens().await?,

@@ -16,13 +16,13 @@ lazy_static! {
         map.insert(324, ChainType::ZK);
 
         /// testnet
-        // Ethereum
+        // Goerli
         map.insert(5, ChainType::Normal);
-        // op
+        // op goerli
         map.insert(420, ChainType::OP);
-        // arb
+        // arb goerli
         map.insert(421613, ChainType::OP);
-        // zk
+        // zk goerli
         map.insert(280, ChainType::ZK);
         map
 
