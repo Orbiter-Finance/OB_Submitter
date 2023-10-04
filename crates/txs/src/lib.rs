@@ -186,6 +186,7 @@ async fn crawl_block_info(
                         "Block #{:} info is saved.",
                         bi.storage.block_number,
                     );
+                    println!("Block #{:} info is saved.", bi.storage.block_number);
 
                     for e in bi.events {
                         match e {

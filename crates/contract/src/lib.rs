@@ -320,7 +320,7 @@ impl ContractTrait for SubmitterContract {
             .topic0(vec![deposit_id, withdraw_id])
             .from_block(from_block)
             .to_block(to_block);
-        let logs = self.client.get_logs(&filter).await.unwrap();
+        let logs = self.client.get_logs(&filter).await.unwrap_or(vec![]);
 
         let mut events: Vec<Event> = vec![];
         for log in logs {
@@ -433,19 +433,21 @@ impl ContractTrait for SubmitterContract {
         }
         let mut storages = vec![];
         for hd in handles {
-            match hd.await.unwrap() {
-                Some(bs) => {
+            match hd.await {
+                Ok(Some(bs)) => {
                     storages.push(bs);
                 }
-                None => {
+                Ok(None) => {
                     return Ok(vec![]);
                 }
+                Err(_) => return Ok(vec![]),
             }
         }
 
-        let events: Vec<Event> = self
+        let events = self
             .get_feemanager_contract_events(from_block, to_block)
-            .await?;
+            .await
+            .unwrap();
 
         // TODO: Currently only supports eth, and will be optimized later.
         // let erc_transfer_events = self

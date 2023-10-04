@@ -1,4 +1,3 @@
-use hex;
 use off_chain_state::{Keccak256Hasher, SmtValue, Value};
 use primitives::types::ProfitStateData;
 use sparse_merkle_tree::{
@@ -69,9 +68,9 @@ pub fn get_no1_merge_value(
     }
     match merge_value {
         MergeValue::MergeWithZero {
-            base_node,
+            base_node: _,
             zero_bits,
-            zero_count,
+            zero_count: _,
         } => {
             return (n, zero_bits);
         }

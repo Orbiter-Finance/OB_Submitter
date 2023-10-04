@@ -17,6 +17,7 @@ pub struct TxsCrawler {
     client: Client,
 }
 
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct TokenAddress {
     tokenAddress: String,

@@ -2,14 +2,14 @@ use thiserror::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 use crate::types::BlockInfo;
 use ethers::prelude::MulticallError;
+use ethers::types::U64;
 use ethers::{
     contract::ContractError,
-    middleware::{MiddlewareError, SignerMiddleware},
+    middleware::SignerMiddleware,
     prelude::LocalWallet,
     providers::{Provider, ProviderError},
 };
 use sled;
-use ethers::types::U64;
 use tokio::sync::broadcast::error::{RecvError, SendError};
 /// The error type for state.
 #[derive(Error, Debug)]
