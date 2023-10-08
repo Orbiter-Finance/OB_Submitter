@@ -100,6 +100,6 @@ fn test() {
     println!("{:?}", s.0);
 
     let v = vec![1, 5, 5, 3, 4, 5, 6, 7, 8];
-    let v = vec_u64_unique(v);
+    // let v = vec_u64_unique(v);
     println!("{:?}", v);
 }

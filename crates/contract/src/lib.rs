@@ -499,8 +499,6 @@ impl ContractTrait for SubmitterContract {
         _token_chian_id: u64,
         _token_id: Address,
     ) -> Result<u64> {
-        // let span = span!(Level::INFO, "get_dealer_profit_percent_by_block");
-        // let _enter = span.enter();
         let fee_manager_contract_address: H160 = get_fee_manager_contract_address();
         let fee_manager_contract =
             FeeManagerContract::new(fee_manager_contract_address, Arc::new(self.client.clone()));

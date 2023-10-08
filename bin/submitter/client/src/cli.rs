@@ -255,6 +255,7 @@ pub async fn run() -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn insert_profit_by_count(
     count: u64,
     state: Arc<RwLock<State<'static, Keccak256Hasher, ProfitStateData>>>,

@@ -89,7 +89,9 @@ impl TxsRocksDB {
         for (key, value) in iter {
             let k: CrossTxData = bincode::deserialize(&key)?;
             let v: CrossTxProfit = bincode::deserialize(&value)?;
-            if k.target_time != end_timestamp {
+
+            // The right side is the open interval
+            if k.target_time < end_timestamp {
                 txs.push((k, v));
             }
         }
