@@ -63,10 +63,10 @@ async fn local_test() {
     ]);
     let contract = SubmitterContract::new(s.clone(), wallet.clone(), start_num, tokens).await;
     // 9734015
-    let block_info = contract.get_block_info(9733395).await;
-    match block_info {
-        Ok(b) => {
-            println!("block_info: {:?}", b);
+    let block_infos = contract.get_block_infos(9733395, 9733395).await;
+    match block_infos {
+        Ok(bs) => {
+            println!("block_infos: {:?}", bs);
         }
         Err(e) => {
             println!("error: {:?}", e);

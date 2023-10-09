@@ -77,7 +77,7 @@ impl Submitter {
             profit_state,
             blocks_state,
             sled_db,
-            rocks_db: rocks_db,
+            rocks_db,
             contract,
             start_block,
             db_path,
@@ -127,8 +127,6 @@ async fn crawl_block_info(
     start_block: Arc<RwLock<u64>>,
     contract: Arc<SubmitterContract>,
 ) -> anyhow::Result<()> {
-    // let span = span!(Level::INFO, "crawl_block_info");
-    // let _enter = span.enter();
     let block_info_db = ContractBlockInfoDB::new(sled_db.clone())?;
     let mut from_block = 0u64;
     {
@@ -233,8 +231,6 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
     start_block: Arc<RwLock<u64>>,
     contract: Arc<SubmitterContract>,
 ) -> anyhow::Result<()> {
-    // let span = span!(Level::INFO, "crawl_txs");
-    // let _enter = span.enter();
     let block_info_db = ContractBlockInfoDB::new(sled_db.clone())?;
     let block_txs_count_db = BlockTxsCountDB::new(sled_db.clone())?;
     let mut from_block = start_block.read().unwrap().clone();
@@ -264,14 +260,17 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
         }
 
         // Get block info from db
+        // from_block - 1: Start from the end of last
         let mut block_infos = vec![];
-        for bn in from_block..(from_block + 100) {
+        for bn in (from_block - 1)..(from_block + 100) {
             match block_info_db.get_block_info(bn)? {
                 Some(bi) => block_infos.push(bi),
                 None => break,
             }
         }
-        if block_infos.len() == 0 {
+        if block_infos.len() == 0
+            || from_block >= block_infos[block_infos.len() - 1].storage.block_number
+        {
             tokio::time::sleep(Duration::from_secs(5)).await;
             continue;
         }
@@ -443,7 +442,6 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
             );
         }
 
-        // TODO: no test
         from_block = to_block_info.storage.block_number;
     }
 }

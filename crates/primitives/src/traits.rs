@@ -81,7 +81,6 @@ pub trait Contract {
         root: [u8; 32],
         blocks_root: [u8; 32],
     ) -> Result<(ethers::types::H256, Option<U64>)>;
-    async fn get_block_info(&self, block_number: u64) -> Result<Option<BlockInfo>>;
     async fn get_block_infos(&self, from_block: u64, to_block: u64) -> Result<Vec<BlockInfo>>;
     async fn get_block_storage(&self, block_number: u64) -> Result<Option<BlockStorage>>;
     async fn get_feemanager_contract_events(

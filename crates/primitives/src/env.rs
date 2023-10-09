@@ -1,8 +1,14 @@
 use crate::types::ChainType;
 use ethers::types::Address;
 
-pub fn get_network_https_url() -> String {
-    std::env::var("NETWORK_RPC_URL").unwrap()
+pub fn get_network_https_urls() -> Vec<String> {
+    let network_rpc_urls = std::env::var("NETWORK_RPC_URLS").unwrap();
+    network_rpc_urls
+        .split(";")
+        .collect::<Vec<&str>>()
+        .iter()
+        .map(|f| f.trim().to_string())
+        .collect()
 }
 
 pub fn get_mainnet_chain_id() -> u64 {

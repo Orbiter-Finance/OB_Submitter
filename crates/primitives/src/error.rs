@@ -37,7 +37,5 @@ pub enum Error {
     #[error("submit root failed")]
     SubmitRootFailed(String, Option<U64>),
     #[error("ethers multicall err")]
-    ETHMulticallError(
-        #[from] MulticallError<SignerMiddleware<Provider<ethers_providers::Http>, LocalWallet>>,
-    ),
+    ETHMulticallError(#[from] MulticallError<ethers_providers::Provider<ethers_providers::Http>>),
 }

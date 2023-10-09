@@ -15,7 +15,7 @@ use ethers::{
     types::{Address, Filter, TransactionReceipt, H160, H256, U256},
 };
 use primitives::{
-    env::{get_fee_manager_contract_address, get_mainnet_chain_id, get_network_https_url},
+    env::{get_fee_manager_contract_address, get_mainnet_chain_id, get_network_https_urls},
     error::{Error as LocalError, Result},
     traits::Contract as ContractTrait,
     types::{BlockInfo, BlockStorage, DepositEvent, Event, FeeManagerDuration, WithdrawEvent},
@@ -65,7 +65,8 @@ impl SubmitterContract {
         support_mainnet_tokens: Arc<Vec<Address>>,
     ) -> Self {
         let provider =
-            Provider::<ethers::providers::Http>::try_from(get_network_https_url()).unwrap();
+            Provider::<ethers::providers::Http>::try_from(get_network_https_urls()[0].clone())
+                .unwrap();
 
         let client: SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>> =
             SignerMiddleware::new_with_provider_chain(provider.clone(), wallet.clone())
@@ -189,26 +190,27 @@ impl ContractTrait for SubmitterContract {
     }
 
     async fn get_block_storage(&self, block_number: u64) -> Result<Option<BlockStorage>> {
-        // let span = span!(Level::INFO, "get_block_storage");
-        // let _enter = span.enter();
+        let provider =
+            Provider::<ethers::providers::Http>::try_from(get_network_https_urls()[0].clone())
+                .unwrap();
+
         let fee_manager_contract = FeeManagerContract::new(
             get_fee_manager_contract_address(),
-            Arc::new(self.client.clone()),
+            Arc::new(provider.clone()),
         );
 
         let duration_check: FunctionCall<
-            Arc<SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>>,
-            SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>,
+            Arc<ethers_providers::Provider<_>>,
+            ethers_providers::Provider<_>,
             u8,
         > = fee_manager_contract.duration_check().block(block_number);
-
         let submissions: FunctionCall<
-            Arc<SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>>,
-            SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>>,
+            Arc<ethers_providers::Provider<_>>,
+            ethers_providers::Provider<_>,
             (u64, u64, u64, [u8; 32], [u8; 32]),
         > = fee_manager_contract.submissions().block(block_number);
 
-        let mut multicall = Multicall::new(self.client.clone(), None)
+        let mut multicall = Multicall::new(provider.clone(), None)
             .await?
             .block(block_number);
         multicall
@@ -386,49 +388,27 @@ impl ContractTrait for SubmitterContract {
         Ok(events)
     }
 
-    // deprecated
-    async fn get_block_info(&self, block_number: u64) -> Result<Option<BlockInfo>> {
-        // let span = span!(Level::INFO, "get_block_info");
-        // let _enter = span.enter();
-
-        let storage = self.get_block_storage(block_number).await?;
-        if storage.is_none() {
-            return Ok(None);
-        }
-
-        let mut events: Vec<Event> = self
-            .get_feemanager_contract_events(block_number, block_number)
-            .await?;
-
-        // TODO: Currently only supports eth, and will be optimized later.
-        let erc_transfer_events = self
-            .get_erc20_transfer_events_by_tokens_id(
-                self.support_mainnet_tokens.as_ref().clone(),
-                block_number,
-            )
-            .await?;
-        events.extend(erc_transfer_events);
-
-        let b = BlockInfo {
-            storage: storage.unwrap(),
-            events,
-        };
-        event!(
-            Level::INFO,
-            "Block #{:?} info: {:?}",
-            block_number,
-            serde_json::to_string(&b.clone()).unwrap(),
-        );
-
-        Ok(Some(b))
-    }
-
     async fn get_block_infos(&self, from_block: u64, to_block: u64) -> Result<Vec<BlockInfo>> {
         let mut handles = vec![];
         for block_number in from_block..to_block + 1 {
             let _self = self.clone();
             handles.push(tokio::spawn(async move {
-                _self.clone().get_block_storage(block_number).await.unwrap()
+                let _op = _self.clone().get_block_storage(block_number).await;
+                if let Err(err) = _op {
+                    event!(
+                        Level::WARN,
+                        "Block #{:?} get_block_info failed: {:?}",
+                        block_number,
+                        err,
+                    );
+
+                    // Waiting some time
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+
+                    return None;
+                }
+
+                _op.unwrap()
             }));
         }
         let mut storages = vec![];
