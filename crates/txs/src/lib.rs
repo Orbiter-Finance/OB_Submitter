@@ -9,7 +9,7 @@ pub mod sled_db;
 use crate::funcs::{SupportChains, TxsCrawler};
 use contract::SubmitterContract;
 use ethers::types::{Address, U256};
-use primitives::error::Error;
+use primitives::{env::get_block_infos_batch, error::Error};
 
 use funcs::{calculate_profit, convert_string_to_hash, get_one_block_txs_hash};
 use hex;
@@ -152,16 +152,16 @@ async fn crawl_block_info(
                     continue;
                 }
 
-                let to_block = min(from_block + 15, end_block);
+                let to_block = min(from_block + get_block_infos_batch(), end_block);
 
                 let result = contract.get_block_infos(from_block, to_block).await;
-                if result.is_err() {
+                if let Err(err) = result {
                     event!(
                         Level::WARN,
-                        "Block #{:?} - #{:?} get block info err: {:?}",
+                        "Block #{:?} - #{:?} get block infos err: {:?}",
                         from_block,
                         to_block,
-                        result.unwrap_err()
+                        err
                     );
                     continue;
                 }

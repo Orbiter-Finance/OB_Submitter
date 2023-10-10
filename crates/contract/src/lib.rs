@@ -15,7 +15,7 @@ use ethers::{
     types::{Address, Filter, TransactionReceipt, H160, H256, U256},
 };
 use primitives::{
-    env::{get_fee_manager_contract_address, get_mainnet_chain_id, get_network_https_urls},
+    env::{get_fee_manager_contract_address, get_mainnet_chain_id, get_mainnet_rpc_urls},
     error::{Error as LocalError, Result},
     traits::Contract as ContractTrait,
     types::{BlockInfo, BlockStorage, DepositEvent, Event, FeeManagerDuration, WithdrawEvent},
@@ -24,6 +24,7 @@ use primitives::{
 use ethers::types::U64;
 use std::{option::Option, str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::{broadcast::Sender, RwLock};
+use tokio::time::timeout;
 use tracing::{event, Level};
 
 abigen!(
@@ -65,7 +66,7 @@ impl SubmitterContract {
         support_mainnet_tokens: Arc<Vec<Address>>,
     ) -> Self {
         let provider =
-            Provider::<ethers::providers::Http>::try_from(get_network_https_urls()[0].clone())
+            Provider::<ethers::providers::Http>::try_from(get_mainnet_rpc_urls()[0].clone())
                 .unwrap();
 
         let client: SignerMiddleware<ethers_providers::Provider<Http>, Wallet<SigningKey>> =
@@ -190,8 +191,11 @@ impl ContractTrait for SubmitterContract {
     }
 
     async fn get_block_storage(&self, block_number: u64) -> Result<Option<BlockStorage>> {
+        let rpc_urls = get_mainnet_rpc_urls();
+        let rpc_urls_index = (block_number % (rpc_urls.len() as u64)) as usize;
+
         let provider =
-            Provider::<ethers::providers::Http>::try_from(get_network_https_urls()[0].clone())
+            Provider::<ethers::providers::Http>::try_from(rpc_urls[rpc_urls_index].clone())
                 .unwrap();
 
         let fee_manager_contract = FeeManagerContract::new(
@@ -393,22 +397,41 @@ impl ContractTrait for SubmitterContract {
         for block_number in from_block..to_block + 1 {
             let _self = self.clone();
             handles.push(tokio::spawn(async move {
-                let _op = _self.clone().get_block_storage(block_number).await;
-                if let Err(err) = _op {
-                    event!(
-                        Level::WARN,
-                        "Block #{:?} get_block_info failed: {:?}",
-                        block_number,
-                        err,
-                    );
+                // Abandon timeout requests to prevent stuck
+                match timeout(
+                    Duration::from_secs(8),
+                    _self.clone().get_block_storage(block_number),
+                )
+                .await
+                {
+                    Ok(r) => {
+                        if let Err(err) = r {
+                            event!(
+                                Level::WARN,
+                                "Block #{:?} get_block_info failed: {:?}",
+                                block_number,
+                                err,
+                            );
 
-                    // Waiting some time
-                    tokio::time::sleep(Duration::from_secs(3)).await;
+                            // Waiting some time
+                            tokio::time::sleep(Duration::from_secs(3)).await;
 
-                    return None;
+                            return None;
+                        }
+
+                        r.unwrap()
+                    }
+                    Err(err) => {
+                        event!(
+                            Level::WARN,
+                            "Block #{:?} get_block_info timeout failed: {:?}",
+                            block_number,
+                            err,
+                        );
+
+                        return None;
+                    }
                 }
-
-                _op.unwrap()
             }));
         }
         let mut storages = vec![];

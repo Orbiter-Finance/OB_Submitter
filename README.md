@@ -44,7 +44,7 @@ cargo build --release
 
 ```shell
 # Ethereum node https url
-export NETWORK_RPC_URLS = "https://eth-mainnet.g.alchemy.com/v2/-e53KLekEWi1sTblk40_P9z_qr_jTHTd"
+export MAINNET_RPC_URLS = "https://eth-mainnet.g.alchemy.com/v2/-e53KLekEWi1sTblk40_P9z_qr_jTHTd"
 # Ethereum network chain id
 export MAINNET_CHAIN_ID=1
 
