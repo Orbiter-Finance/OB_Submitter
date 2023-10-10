@@ -8,7 +8,7 @@ pub mod sled_db;
 
 use crate::funcs::{SupportChains, TxsCrawler};
 use contract::SubmitterContract;
-use ethers::types::{Address, U256};
+use ethers::types::{Address, H160, U256};
 use primitives::{env::get_block_infos_batch, error::Error};
 
 use funcs::{calculate_profit, convert_string_to_hash, get_one_block_txs_hash};
@@ -685,6 +685,14 @@ async fn submit_root(
             hex::encode(&profit_root.as_slice()),
             hex::encode(&block_txs_root.as_slice()),
         );
+
+        // no-private-key mode
+        if contract.client.address()
+            == H160::from_str("0x7e5f4552091a69125d5dfcb7b8c2659029395bdf").unwrap()
+        {
+            continue;
+        }
+
         match contract
             .submit_root(
                 newest_block_info.storage.last_update_block,
