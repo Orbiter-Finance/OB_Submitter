@@ -669,6 +669,13 @@ async fn submit_root(
             now_block_num += 1;
         }
 
+        // no-private-key mode
+        if contract.client.address()
+            == H160::from_str("0x7e5f4552091a69125d5dfcb7b8c2659029395bdf").unwrap()
+        {
+            continue;
+        }
+
         let profit_root = profit_state.read().unwrap().try_get_root()?;
         let block_txs_root = blocks_state.read().unwrap().try_get_root()?;
 
@@ -685,13 +692,6 @@ async fn submit_root(
             hex::encode(&profit_root.as_slice()),
             hex::encode(&block_txs_root.as_slice()),
         );
-
-        // no-private-key mode
-        if contract.client.address()
-            == H160::from_str("0x7e5f4552091a69125d5dfcb7b8c2659029395bdf").unwrap()
-        {
-            continue;
-        }
 
         match contract
             .submit_root(
