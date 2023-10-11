@@ -1,18 +1,11 @@
 #![cfg(test)]
 use super::*;
-use crate::{
-    erc20_contract::{ERC20Contract, TransferFilter},
-    fee_manager_contract::{FeeManagerContract, WithdrawFilter},
-};
+use crate::erc20_contract::{ERC20Contract, TransferFilter};
 use ethers::{
-    middleware::SignerMiddleware,
-    prelude::LocalWallet,
-    providers::Provider,
-    types::{Address, H160},
+    middleware::SignerMiddleware, prelude::LocalWallet, providers::Provider, types::Address,
 };
 use std::{str::FromStr, sync::Arc};
 use tokio;
-use tracing::{event, Level};
 
 // abigen!(
 // //     ERC20Contract,
@@ -61,20 +54,7 @@ async fn local_test() {
         .parse::<LocalWallet>()
         .unwrap();
 
-    let provider = Provider::<ethers::providers::Http>::try_from(
-        "https://eth-goerli.api.onfinality.io/public",
-    )
-    .unwrap();
-
-    let client = SignerMiddleware::new_with_provider_chain(provider.clone(), wallet.clone())
-        .await
-        .unwrap();
-
-    let a = Address::from_str("0xA191028bf304209a14acA85866999d8140BA54d8").unwrap();
-    // 9651820
-    let block_number = 9651820u64;
-    let (s, r) = tokio::sync::broadcast::channel::<BlockInfo>(100);
-    let entry_point = FeeManagerContract::new(a, Arc::new(client.clone()));
+    let (s, _r) = tokio::sync::broadcast::channel::<BlockInfo>(100);
     let start_num = Arc::new(RwLock::new(064));
     let tokens: Arc<Vec<Address>> = Arc::new(vec![
         Address::from_str("0xa3a8a6b323e3d38f5284db9337e7c6d74af3366a").unwrap(),
@@ -83,10 +63,10 @@ async fn local_test() {
     ]);
     let contract = SubmitterContract::new(s.clone(), wallet.clone(), start_num, tokens).await;
     // 9734015
-    let block_info = contract.get_block_info(9733395).await;
-    match block_info {
-        Ok(b) => {
-            println!("block_info: {:?}", b);
+    let block_infos = contract.get_block_infos(9733395, 9733395).await;
+    match block_infos {
+        Ok(bs) => {
+            println!("block_infos: {:?}", bs);
         }
         Err(e) => {
             println!("error: {:?}", e);

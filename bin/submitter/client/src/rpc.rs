@@ -2,12 +2,12 @@
 
 use async_trait::async_trait;
 use ethers::{
-    types::{Address, StorageProof, U256},
+    types::{Address, U256},
     utils::hex,
 };
 use jsonrpsee::{
     core::RpcResult,
-    types::{error::ErrorCode, ErrorObject, ErrorObjectOwned},
+    types::{ErrorObject, ErrorObjectOwned},
 };
 use primitives::{
     constants::*,
@@ -16,10 +16,8 @@ use primitives::{
     traits::{DebugApiServer, StataTrait, SubmitterApiServer},
     types::*,
 };
-use sparse_merkle_tree::merge::MergeValue;
-use state::{Keccak256Hasher, SmtValue, State, Value, H256};
+use state::{Keccak256Hasher, SmtValue, State, H256};
 use std::{
-    ops::Deref,
     str::FromStr,
     sync::{Arc, RwLock},
 };
@@ -27,7 +25,7 @@ use txs::{
     rocks_db::TxsRocksDB,
     sled_db::{ProfitStatisticsDB, UserTokensDB},
 };
-use utils::{get_no1_merge_value, SMTBitMap};
+use utils::get_no1_merge_value;
 
 pub struct JsonRpcError(pub ErrorObjectOwned);
 
@@ -38,7 +36,7 @@ impl From<JsonRpcError> for ErrorObjectOwned {
 }
 
 pub const RWLOCK_WRITE_ERROR_CODE: i32 = 888;
-pub const PARAMETER_ERROR_CODE: i32 = 889;
+// pub const PARAMETER_ERROR_CODE: i32 = 889;
 
 impl From<StateError> for JsonRpcError {
     fn from(err: StateError) -> Self {

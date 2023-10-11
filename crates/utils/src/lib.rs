@@ -1,4 +1,3 @@
-use hex;
 use off_chain_state::{Keccak256Hasher, SmtValue, Value};
 use primitives::types::ProfitStateData;
 use sparse_merkle_tree::{
@@ -69,9 +68,9 @@ pub fn get_no1_merge_value(
     }
     match merge_value {
         MergeValue::MergeWithZero {
-            base_node,
+            base_node: _,
             zero_bits,
-            zero_count,
+            zero_count: _,
         } => {
             return (n, zero_bits);
         }
@@ -101,6 +100,6 @@ fn test() {
     println!("{:?}", s.0);
 
     let v = vec![1, 5, 5, 3, 4, 5, 6, 7, 8];
-    let v = vec_u64_unique(v);
+    // let v = vec_u64_unique(v);
     println!("{:?}", v);
 }

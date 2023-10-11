@@ -1,12 +1,25 @@
 use crate::types::ChainType;
 use ethers::types::Address;
 
-pub fn get_network_https_url() -> String {
-    std::env::var("NETWORK_RPC_URL").unwrap()
+pub fn get_mainnet_rpc_urls() -> Vec<String> {
+    let mainnet_rpc_urls = std::env::var("MAINNET_RPC_URLS").unwrap();
+    mainnet_rpc_urls
+        .split(";")
+        .collect::<Vec<&str>>()
+        .iter()
+        .map(|f| f.trim().to_string())
+        .collect()
 }
 
 pub fn get_mainnet_chain_id() -> u64 {
     std::env::var("MAINNET_CHAIN_ID").unwrap().parse().unwrap()
+}
+
+pub fn get_block_infos_batch() -> u64 {
+    std::env::var("BLOCK_INFOS_BATCH")
+        .unwrap_or("".to_string())
+        .parse()
+        .unwrap_or(10)
 }
 
 pub fn get_start_block() -> u64 {

@@ -1,19 +1,10 @@
 #![cfg(test)]
 
-use super::{func::chain_token_address_convert_to_h256, types::ProfitStateData};
-use crate::types::AbiDecode;
-use ethers::{
-    abi::{
-        decode, encode, Detokenize, Error, ParamType, ParamType::Tuple, Token, Tokenizable,
-        TokenizableItem, Tokenize,
-    },
-    types::{Address, U256},
-    utils::hex,
-};
-use std::str::FromStr;
-// use ethers::types::H256;
+use super::func::chain_token_address_convert_to_h256;
 use crate::keccak256_hasher::Keccak256Hasher;
-use sparse_merkle_tree::{traits::Hasher, H256};
+use ethers::{types::Address, utils::hex};
+use sparse_merkle_tree::traits::Hasher;
+use std::str::FromStr;
 
 #[test]
 fn main() {

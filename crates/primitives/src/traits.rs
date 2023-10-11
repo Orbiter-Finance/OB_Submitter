@@ -2,12 +2,12 @@ use crate::types::{
     BlockInfo, BlockStorage, BlocksStateData, CrossTxProfit, Event, ProfitProof, ProfitStateData,
     ProfitStateDataForRpc,
 };
-use ethers::types::U64;
 use async_trait::async_trait;
-use ethers::types::{Address, U256};
+use ethers::types::Address;
+use ethers::types::U64;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 use sparse_merkle_tree::{merge::MergeValue, H256};
-use std::result::Result as StdResult;
+
 // local
 use super::error::Result;
 
@@ -81,9 +81,13 @@ pub trait Contract {
         root: [u8; 32],
         blocks_root: [u8; 32],
     ) -> Result<(ethers::types::H256, Option<U64>)>;
-    async fn get_block_info(&self, block_number: u64) -> Result<Option<BlockInfo>>;
+    async fn get_block_infos(&self, from_block: u64, to_block: u64) -> Result<Vec<BlockInfo>>;
     async fn get_block_storage(&self, block_number: u64) -> Result<Option<BlockStorage>>;
-    async fn get_feemanager_contract_events(&self, block_number: u64) -> Result<Vec<Event>>;
+    async fn get_feemanager_contract_events(
+        &self,
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<Vec<Event>>;
     async fn get_erc20_transfer_events_by_tokens_id(
         &self,
         tokens: Vec<Address>,

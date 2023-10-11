@@ -17,6 +17,7 @@ pub struct TxsCrawler {
     client: Client,
 }
 
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct TokenAddress {
     tokenAddress: String,
@@ -89,8 +90,6 @@ impl TxsCrawler {
             || (res.status() == reqwest::StatusCode::CREATED)
         {
             let res: Value = serde_json::from_str(&res.text().await?)?;
-            // event!(Level::INFO, "response: {:#?}", res);
-            // println!("response: {:#?}", res);
             let res: &Value = &res["result"][target_chain_id.to_string()];
             event!(
                 Level::INFO,
@@ -103,7 +102,7 @@ impl TxsCrawler {
             let old_txs: Vec<CrossTxRawData> = serde_json::from_value(res.clone())?;
             let mut new_txs: Vec<CrossTxRawData> = vec![];
             for tx in old_txs {
-                // todo check source_time
+                // TODO: check source_time
                 event!(Level::INFO, "tx: {:?}", tx);
                 let mut tx = tx;
                 tx.target_time = tx.target_time + delay_timestamp * 1000;
@@ -119,6 +118,8 @@ impl TxsCrawler {
 pub struct SupportChains {
     url: String,
     headers: HeaderMap,
+
+    #[allow(dead_code)]
     method: String,
     client: Client,
 }
@@ -145,14 +146,10 @@ impl SupportChains {
 
     pub async fn get_mainnet_support_tokens(&self) -> anyhow::Result<Vec<Address>> {
         let graphql_url = &self.url;
-        let query = r#"
-    {
-      tokenRels (where: {chainId: "5"}) {
-        tokenAddress
-
-      }
-    }
-    "#;
+        let query = format!(
+            r#"{{tokenRels (where: {{chainId: "{}"}}) {{tokenAddress}}}}"#,
+            get_mainnet_chain_id()
+        );
         let json_body = serde_json::json!({ "query": query });
         let mut tokens: Vec<Address> = vec![];
         let res = self
@@ -230,7 +227,7 @@ pub fn calculate_profit(percent: u64, tx: CrossTxData) -> CrossTxProfit {
     CrossTxProfit {
         maker_address: tx.source_maker,
         dealer_address: tx.dealer_address,
-        profit: profit,
+        profit,
         chain_id: get_mainnet_chain_id(),
         token: tx.source_token,
     }

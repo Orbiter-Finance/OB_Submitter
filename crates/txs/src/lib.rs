@@ -8,8 +8,8 @@ pub mod sled_db;
 
 use crate::funcs::{SupportChains, TxsCrawler};
 use contract::SubmitterContract;
-use ethers::types::{Address, U256};
-use primitives::error::Error;
+use ethers::types::{Address, H160, U256};
+use primitives::{env::get_block_infos_batch, error::Error};
 
 use funcs::{calculate_profit, convert_string_to_hash, get_one_block_txs_hash};
 use hex;
@@ -43,6 +43,7 @@ use sparse_merkle_tree::H256;
 use state::{Keccak256Hasher, State};
 use std::{
     cmp::{max, min},
+    collections::HashMap,
     str::FromStr,
     sync::{Arc, RwLock},
     time::Duration,
@@ -76,7 +77,7 @@ impl Submitter {
             profit_state,
             blocks_state,
             sled_db,
-            rocks_db: rocks_db,
+            rocks_db,
             contract,
             start_block,
             db_path,
@@ -126,83 +127,98 @@ async fn crawl_block_info(
     start_block: Arc<RwLock<u64>>,
     contract: Arc<SubmitterContract>,
 ) -> anyhow::Result<()> {
-    // let span = span!(Level::INFO, "crawl_block_info");
-    // let _enter = span.enter();
     let block_info_db = ContractBlockInfoDB::new(sled_db.clone())?;
-    let mut now_block = 0u64;
+    let mut from_block = 0u64;
     {
-        now_block = start_block.read().unwrap().clone();
+        from_block = start_block.read().unwrap().clone();
     }
-    if now_block == 0 {
+    if from_block == 0 {
         unreachable!()
     } else {
-        now_block = now_block.saturating_sub(1);
+        from_block = from_block.saturating_sub(1);
     }
+
     event!(Level::INFO, "block info crawler is ready.");
+
     let profit_statistic_db = ProfitStatisticsDB::new(sled_db.clone())?;
     let user_tokens_db = UserTokensDB::new(sled_db.clone())?;
     loop {
         if let Ok(newest_block) = newest_block_receiver.recv().await {
-            while now_block <= newest_block.storage.block_number - ETH_DELAY_BLOCKS {
-                if block_info_db.get_block_info(now_block)?.is_none() {
-                    match contract.get_block_info(now_block).await {
-                        Ok(Some(now_block_info)) => {
-                            block_info_db.insert_block_info(
-                                now_block_info.storage.block_number,
-                                now_block_info.clone(),
-                            )?;
+            let end_block = newest_block.storage.block_number - ETH_DELAY_BLOCKS;
+            while from_block <= end_block {
+                // Filter saved block
+                if block_info_db.get_block_info(from_block)?.is_some() {
+                    from_block += 1;
+                    continue;
+                }
 
-                            event!(
-                                Level::INFO,
-                                "Block #{:} info is saved.",
-                                now_block_info.storage.block_number,
-                            );
-                            for e in now_block_info.events {
-                                match e {
-                                    Event::Withdraw(w_e) => {
-                                        user_tokens_db.insert_token(
-                                            w_e.address,
-                                            w_e.chain_id,
-                                            w_e.token_address,
-                                        )?;
-                                        profit_statistic_db.update_total_withdraw(
-                                            w_e.address,
-                                            w_e.chain_id,
-                                            w_e.token_address,
-                                            w_e.balance,
-                                        )?;
-                                    }
-                                    Event::Deposit(d_e) => {
-                                        user_tokens_db.insert_token(
-                                            d_e.address,
-                                            d_e.chain_id,
-                                            d_e.token_address,
-                                        )?;
-                                        profit_statistic_db.update_total_deposit(
-                                            d_e.address,
-                                            d_e.chain_id,
-                                            d_e.token_address,
-                                            d_e.balance,
-                                        )?;
-                                    }
-                                }
+                let to_block = min(from_block + get_block_infos_batch(), end_block);
+
+                let result = contract.get_block_infos(from_block, to_block).await;
+                if let Err(err) = result {
+                    event!(
+                        Level::WARN,
+                        "Block #{:?} - #{:?} get block infos err: {:?}",
+                        from_block,
+                        to_block,
+                        err
+                    );
+                    continue;
+                }
+
+                let block_infos = result.unwrap();
+                if block_infos.len() == 0 {
+                    event!(
+                        Level::WARN,
+                        "Block #{:?} - #{:?} get block empty.",
+                        from_block,
+                        to_block,
+                    );
+                    continue;
+                }
+
+                for bi in block_infos {
+                    block_info_db.insert_block_info(bi.storage.block_number, bi.clone())?;
+
+                    event!(
+                        Level::INFO,
+                        "Block #{:} info is saved.",
+                        bi.storage.block_number,
+                    );
+
+                    for e in bi.events {
+                        match e {
+                            Event::Withdraw(w_e) => {
+                                user_tokens_db.insert_token(
+                                    w_e.address,
+                                    w_e.chain_id,
+                                    w_e.token_address,
+                                )?;
+                                profit_statistic_db.update_total_withdraw(
+                                    w_e.address,
+                                    w_e.chain_id,
+                                    w_e.token_address,
+                                    w_e.balance,
+                                )?;
                             }
-                        }
-                        Err(e) => {
-                            event!(
-                                Level::WARN,
-                                "Block #{:?} - get block info err: {:?}",
-                                now_block,
-                                e,
-                            );
-                            continue;
-                        }
-                        _ => {
-                            continue;
+                            Event::Deposit(d_e) => {
+                                user_tokens_db.insert_token(
+                                    d_e.address,
+                                    d_e.chain_id,
+                                    d_e.token_address,
+                                )?;
+                                profit_statistic_db.update_total_deposit(
+                                    d_e.address,
+                                    d_e.chain_id,
+                                    d_e.token_address,
+                                    d_e.balance,
+                                )?;
+                            }
                         }
                     }
                 }
-                now_block += 1;
+
+                from_block = to_block + 1;
             }
         }
     }
@@ -215,21 +231,16 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
     start_block: Arc<RwLock<u64>>,
     contract: Arc<SubmitterContract>,
 ) -> anyhow::Result<()> {
-    // let span = span!(Level::INFO, "crawl_txs");
-    // let _enter = span.enter();
     let block_info_db = ContractBlockInfoDB::new(sled_db.clone())?;
     let block_txs_count_db = BlockTxsCountDB::new(sled_db.clone())?;
-    let mut now_block = 0;
-    {
-        now_block = start_block.read().unwrap().clone();
-    }
+    let mut from_block = start_block.read().unwrap().clone();
 
-    if now_block == 0 {
+    if from_block == 0 {
         unreachable!()
     }
 
     let maker_profit_db = MakerProfitDB::new(sled_db.clone())?;
-    let mut support_chains: Vec<u64> = vec_unique(
+    let support_chains: Vec<u64> = vec_unique(
         SupportChains::new(get_chains_info_source_url())
             .get_support_chains()
             .await?,
@@ -240,156 +251,198 @@ async fn crawl_txs_and_calculate_profit_for_per_block(
     }
 
     event!(Level::INFO, "txs crawler is ready.");
+
     loop {
-        if let Some(now_block_info) = block_info_db.get_block_info(now_block)? {
-            if let Ok(Some(n)) = block_txs_count_db.get_count(now_block) {
-                now_block += 1;
+        // Block's txs saved
+        if let Ok(Some(_)) = block_txs_count_db.get_count(from_block) {
+            from_block += 1;
+            continue;
+        }
+
+        // Get block info from db
+        // from_block - 1: Start from the end of last
+        let mut block_infos = vec![];
+        for bn in (from_block - 1)..(from_block + 100) {
+            match block_info_db.get_block_info(bn)? {
+                Some(bi) => block_infos.push(bi),
+                None => break,
+            }
+        }
+        if block_infos.len() == 0
+            || from_block >= block_infos[block_infos.len() - 1].storage.block_number
+        {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
+        let from_block_info = block_infos[0].clone();
+        let to_block_info = block_infos[block_infos.len() - 1].clone();
+
+        let mut new_txs_map: HashMap<u64, Vec<(CrossTxData, CrossTxProfit)>> = HashMap::new();
+        let mut chain_count = 0;
+        while chain_count < support_chains.len() {
+            let chain = support_chains[chain_count];
+            event!(
+                Level::INFO,
+                "Block #{:} - #{:}, crawling txs. chain id :{:?}, start_timestamp: {:?}, end_timestamp: {:?} ",
+                from_block_info.storage.block_number,
+                to_block_info.storage.block_number,
+                chain,
+                from_block_info.storage.block_timestamp,
+                to_block_info.storage.block_timestamp
+            );
+
+            let result = TxsCrawler::new(get_txs_source_url())
+                .request_txs(
+                    chain,
+                    from_block_info.storage.block_timestamp,
+                    to_block_info.storage.block_timestamp,
+                    get_delay_seconds_by_chain_type(get_chain_type(chain)),
+                )
+                .await;
+            if let Err(err) = result {
+                event!(
+                    Level::WARN,
+                    "Get txs err: {:?}. start: {:?}, end: {:?}. chain_id: {:?}",
+                    err,
+                    from_block_info.storage.block_timestamp,
+                    to_block_info.storage.block_timestamp,
+                    chain
+                );
+                tokio::time::sleep(Duration::from_secs(3)).await;
                 continue;
             }
 
-            let now_block_timestamp = now_block_info.storage.block_timestamp;
-            let last_block_number = now_block_info.storage.block_number - 1;
-
-            if let Some(last_block_info) = block_info_db.get_block_info(last_block_number)? {
-                let last_block_timestamp = last_block_info.storage.block_timestamp;
-
-                let mut new_txs: Vec<(CrossTxData, CrossTxProfit)> = Vec::new();
-                let mut count = 0;
-                let mut chain_count = 0;
-                while chain_count < support_chains.len() {
-                    let chain = support_chains[chain_count];
-                    event!(
+            chain_count += 1;
+            let txs = result.unwrap();
+            if !txs.is_empty() {
+                event!(
                     Level::INFO,
-                    "Block #{:}, crawling txs. chain id :{:?}, start_timestamp: {:?}, end_timestamp: {:?} ",
-                    now_block_info.storage.block_number,
-                        chain,
-                    last_block_timestamp,
-                    now_block_timestamp,
+                    "successfully obtained {:} pieces of txs from chain {:}",
+                    txs.clone().len(),
+                    chain,
                 );
-                    match TxsCrawler::new(get_txs_source_url())
-                        .request_txs(
-                            chain,
-                            last_block_timestamp,
-                            now_block_timestamp,
-                            get_delay_seconds_by_chain_type(get_chain_type(chain)),
+            }
+
+            let mut tx_index = 0;
+            while tx_index < txs.len() {
+                let tx: CrossTxData = txs[tx_index].clone().into();
+                tx_index += 1;
+
+                // Check support chains
+                if let None = support_chains.iter().position(|p| p == &tx.target_chain) {
+                    event!(
+                        Level::WARN,
+                        "target chain id {:} is not support, continue",
+                        tx.target_chain,
+                    );
+                    continue;
+                }
+                if let None = support_chains.iter().position(|p| p == &tx.source_chain) {
+                    event!(
+                        Level::WARN,
+                        "source chain id {:} is not support, continue",
+                        tx.source_chain,
+                    );
+                    continue;
+                }
+
+                // Find target block
+                let mut _option: Option<BlockInfo> = None;
+                for i in 0..(block_infos.len() - 1) {
+                    if tx.target_time >= block_infos[i].storage.block_timestamp * 1000
+                        && tx.target_time < block_infos[i + 1].storage.block_timestamp * 1000
+                    {
+                        _option = Some(block_infos[i].clone());
+                    }
+                }
+                if _option.is_none() {
+                    event!(
+                        Level::WARN,
+                        "Target block not found, target id: {:}",
+                        hex::encode(tx.target_id.as_slice()),
+                    );
+                    continue;
+                }
+                let target_block_info = _option.unwrap();
+
+                let token = tx.source_token;
+                let dealer = tx.dealer_address;
+
+                // Get percent
+                let mut percent = 0u64;
+                if let Some(p) = maker_profit_db.get_percent(
+                    dealer,
+                    target_block_info.storage.block_number,
+                    token,
+                )? {
+                    percent = p;
+                } else {
+                    if let Ok(p) = contract
+                        .get_dealer_profit_percent_by_block(
+                            dealer,
+                            target_block_info.storage.block_number,
+                            get_mainnet_chain_id(),
+                            token,
                         )
                         .await
                     {
-                        Ok(txs) => {
-                            chain_count += 1;
-                            if !txs.is_empty() {
-                                event!(
-                                    Level::INFO,
-                                    "successfully obtained {:} pieces of txs from chain {:}",
-                                    txs.clone().len(),
-                                    chain,
-                                );
-                            }
-                            let mut tx_count = 0;
-                            while tx_count < txs.len() {
-                                let tx = txs[tx_count].clone();
-                                let tx: CrossTxData = tx.into();
-                                if let None =
-                                    support_chains.iter().position(|p| p == &tx.target_chain)
-                                {
-                                    event!(
-                                        Level::WARN,
-                                        "target chain id {:} is not support, continue",
-                                        tx.target_chain,
-                                    );
-                                    tx_count += 1;
-                                    continue;
-                                }
-                                if let None =
-                                    support_chains.iter().position(|p| p == &tx.source_chain)
-                                {
-                                    tx_count += 1;
-                                    event!(
-                                        Level::WARN,
-                                        "source chain id {:} is not support, continue",
-                                        tx.source_chain,
-                                    );
-                                    continue;
-                                }
-                                let token = tx.source_token;
-                                let dealer = tx.dealer_address;
-                                let mainnet_chain_id = get_mainnet_chain_id();
-                                let mut percent = 0u64;
-                                if let Some(p) =
-                                    maker_profit_db.get_percent(dealer, now_block, token)?
-                                {
-                                    percent = p;
-                                } else {
-                                    if let Ok(p) = contract
-                                        .get_dealer_profit_percent_by_block(
-                                            dealer,
-                                            last_block_number,
-                                            mainnet_chain_id,
-                                            token,
-                                        )
-                                        .await
-                                    {
-                                        maker_profit_db
-                                            .insert_percent(dealer, now_block, token, p)?;
-                                        percent = p;
-                                    } else {
-                                        continue;
-                                    }
-                                };
-                                let profit = calculate_profit(percent as u64, tx.clone());
-                                event!(
-                                    Level::INFO,
-                                    "Block #{:} - dealer {:} - profit percent: {:?}",
-                                    now_block, dealer, percent,
-                                );
-
-                                new_txs.push((tx.clone(), profit.clone()));
-                                event!(
-                                    Level::INFO,
-                                    "Block #{:} - tx {:} - profit: {:?}",
-                                    now_block_info.storage.block_number,
-                                    hex::encode(tx.target_id.as_slice()),
-                                    profit,
-                                );
-                                count += 1;
-                                tx_count += 1;
-                            }
-                        }
-                        Err(e) => {
-                            event!(
-                                Level::WARN,
-                                "get txs err: {:?}. start: {:?}, end: {:?}. chain_id: {:?}",
-                                e,
-                                last_block_timestamp,
-                                now_block_timestamp,
-                                chain
-                            );
-                            tokio::time::sleep(Duration::from_secs(3)).await;
-                            continue;
-                        }
+                        maker_profit_db.insert_percent(
+                            dealer,
+                            target_block_info.storage.block_number,
+                            token,
+                            p,
+                        )?;
+                        percent = p;
+                    } else {
+                        // Retry
+                        tx_index -= 1;
+                        continue;
                     }
-                }
-                now_block += 1;
-                txs_db.insert_txs(new_txs.clone())?;
-                block_txs_count_db
-                    .insert_count(now_block_info.storage.block_number, new_txs.len() as u64)?;
+                };
+
+                let profit = calculate_profit(percent as u64, tx.clone());
                 event!(
                     Level::INFO,
-                    "Block #{:} - txs are saved. count: {:?}",
-                    now_block_info.storage.block_number,
-                    count
+                    "Block #{:} - dealer {:}, profit percent: {:?}, tx: {:}, profit: {:?}",
+                    target_block_info.storage.block_number,
+                    dealer,
+                    percent,
+                    hex::encode(tx.target_id.as_slice()),
+                    profit,
                 );
-            } else {
-                panic!("last block info is none.");
+
+                if new_txs_map
+                    .get(&(target_block_info.storage.block_number))
+                    .is_none()
+                {
+                    new_txs_map.insert(target_block_info.storage.block_number, Vec::new());
+                }
+                let value = new_txs_map
+                    .get_mut(&(target_block_info.storage.block_number))
+                    .unwrap();
+                value.push((tx.clone(), profit.clone()));
             }
-        } else {
+        }
+
+        // Save to db
+        for bi in block_infos {
+            let mut new_txs = vec![];
+            if let Some(_txs) = new_txs_map.get(&bi.storage.block_number) {
+                new_txs = _txs.clone();
+            }
+
+            txs_db.insert_txs(new_txs.clone())?;
+            block_txs_count_db.insert_count(bi.storage.block_number, new_txs.len() as u64)?;
             event!(
                 Level::INFO,
-                "Block #{:} - block info has not been crawled yet.",
-                now_block
+                "Block #{:} - txs are saved. count: {:?}",
+                bi.storage.block_number,
+                new_txs.len()
             );
-            tokio::time::sleep(Duration::from_secs(5)).await;
         }
+
+        from_block = to_block_info.storage.block_number;
     }
 }
 
@@ -402,8 +455,6 @@ async fn submit_root(
     contract: Arc<SubmitterContract>,
     start_block: Arc<RwLock<u64>>,
 ) -> anyhow::Result<()> {
-    // let span = span!(Level::INFO, "submit_root");
-    // let _enter = span.enter();
     let block_info_db = ContractBlockInfoDB::new(sled_db.clone())?;
     let block_txs_count_db = BlockTxsCountDB::new(sled_db.clone())?;
     let user_tokens_db = UserTokensDB::new(sled_db.clone())?;
@@ -415,7 +466,9 @@ async fn submit_root(
     {
         now_block_num = start_block.read().unwrap().clone();
     }
+
     event!(Level::INFO, "submit root thread is ready.");
+
     loop {
         {
             if let Ok(info) = newest_block_receiver.recv().await {
@@ -425,11 +478,11 @@ async fn submit_root(
                 newest_block_info = info
             }
         }
-        let is_chilled =
-            newest_block_info.clone().storage.duration == FeeManagerDuration::default();
-        if !is_chilled {
+
+        if newest_block_info.clone().storage.duration != FeeManagerDuration::default() {
             continue;
         }
+
         let trusted_block_num = newest_block_info.storage.block_number - ETH_DELAY_BLOCKS;
         event!(
             Level::INFO,
@@ -448,12 +501,14 @@ async fn submit_root(
         while now_block_num < end_block_num {
             let now_block_info_op = block_info_db.get_block_info(now_block_num)?;
             if now_block_info_op.is_none() {
+                tokio::time::sleep(Duration::from_secs(3)).await;
                 continue;
             }
             let now_block_info = now_block_info_op.unwrap();
             let last_block_info_op =
                 block_info_db.get_block_info(now_block_num.checked_sub(1).unwrap())?;
             if last_block_info_op.is_none() {
+                tokio::time::sleep(Duration::from_secs(3)).await;
                 continue;
             }
 
@@ -591,6 +646,7 @@ async fn submit_root(
             if now_block_num == 0 {
                 unreachable!()
             }
+
             let mut b_w = blocks_state.write().unwrap();
             let last_key = block_number_convert_to_h256(now_block_num - 1);
             let now_key = block_number_convert_to_h256(now_block_num);
@@ -613,6 +669,13 @@ async fn submit_root(
             now_block_num += 1;
         }
 
+        // no-private-key mode
+        if contract.client.address()
+            == H160::from_str("0x7e5f4552091a69125d5dfcb7b8c2659029395bdf").unwrap()
+        {
+            continue;
+        }
+
         let profit_root = profit_state.read().unwrap().try_get_root()?;
         let block_txs_root = blocks_state.read().unwrap().try_get_root()?;
 
@@ -629,6 +692,7 @@ async fn submit_root(
             hex::encode(&profit_root.as_slice()),
             hex::encode(&block_txs_root.as_slice()),
         );
+
         match contract
             .submit_root(
                 newest_block_info.storage.last_update_block,
@@ -639,20 +703,30 @@ async fn submit_root(
             .await
         {
             Ok(r) => {
-                event!(Level::INFO, "Block #{:?}, submit root hash: {:?}", newest_block_info.storage.block_number, r);
+                event!(
+                    Level::INFO,
+                    "Block #{:?}, submit root hash: {:?}",
+                    newest_block_info.storage.block_number,
+                    r
+                );
                 if let Some(s) = r.1 {
                     submit_root_block_num = s.as_u64();
                 }
             }
             Err(e) => {
-                event!(Level::WARN, "Block #{:?}, submit root err: {:?}", newest_block_info.storage.block_number, e);
+                event!(
+                    Level::WARN,
+                    "Block #{:?}, submit root err: {:?}",
+                    newest_block_info.storage.block_number,
+                    e
+                );
                 match e {
                     Error::SubmitRootFailed(err, b) => {
                         if let Some(s) = b {
                             submit_root_block_num = s.as_u64();
                         }
                     }
-                    _ => {},
+                    _ => {}
                 }
             }
         }

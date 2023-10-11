@@ -2,39 +2,49 @@
 
 ## Introduction
 
-Responsible for the profit statistics of Ethereum L2 cross-chain transactions, 
-and submits the Merkel root of the profit data to the Ethereum L1 chain. 
+Responsible for the profit statistics of Ethereum L2 cross-chain transactions,
+and submits the Merkel root of the profit data to the Ethereum L1 chain.
 Completely decentralized.
+
 ## Installation
 
 ### Docker
+
 todo
 
 ### Local
 
 1. install git
+
 ```asm
 sudo apt install git
 ```
+
 2. install rust
+
 ```angular2html
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
+
 3. install clang and llvm
+
 ```angular2html
 sudo apt install clang llvm
 ```
 
 4. build submitter
+
 ```angular2html
-git clone https://github.com/Orbiter-Finance/OB_Submitter.git 
+git clone https://github.com/Orbiter-Finance/OB_Submitter.git
 cd submitter
 cargo build --release
 ```
+
 5. configure environment variables
+
 ```shell
 # Ethereum node https url
-export NETWORK_RPC_URL = "https://eth-mainnet.g.alchemy.com/v2/-e53KLekEWi1sTblk40_P9z_qr_jTHTd"
+export MAINNET_RPC_URLS = "https://eth-mainnet.g.alchemy.com/v2/-e53KLekEWi1sTblk40_P9z_qr_jTHTd"
 # Ethereum network chain id
 export MAINNET_CHAIN_ID=1
 
@@ -54,18 +64,17 @@ export OP_DELAY_SECONDS=604800
 # Use directly without changing
 export COMMON_DELAY_SECONDS=900
 ```
+
 5. run submitter
+
 ```angular2html
 ./target/release/submitter
 ```
+
 > If you don't want to be a submitter and just want to sync data, then you can use `--no-private-key` in your command line.
-> for example, `./target/release/submitter --no-private-key`
-6. view log
+> for example, `./target/release/submitter --no-private-key` 6. view log
+
 ```shell
 # for example
 tail -f -n 100 db/logs/submitter.log.2023-09-20
 ```
-
-
-
-

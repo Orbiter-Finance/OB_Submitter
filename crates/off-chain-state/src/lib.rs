@@ -30,7 +30,6 @@ use ethers::{
     types::{Address, U256},
     utils::keccak256,
 };
-// use ethers::utils::rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 pub use primitives::keccak256_hasher::Keccak256Hasher;
 use primitives::{error::Result, traits::StataTrait, types::AbiDecode};
 use rocksdb::{prelude::Iterate, Direction, IteratorMode};

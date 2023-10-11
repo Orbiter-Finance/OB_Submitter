@@ -3,9 +3,10 @@ use lazy_static::lazy_static;
 use std::collections::btree_map::BTreeMap;
 
 lazy_static! {
-    pub static ref ChainsType: BTreeMap<u64, ChainType> = {
+    pub static ref CHAIN_TYPES: BTreeMap<u64, ChainType> = {
         let mut map = BTreeMap::new();
-        /// mainnet
+
+        // Mainnet ↓↓↓
         // Ethereum
         map.insert(1, ChainType::Normal);
         // Arbitrum
@@ -15,22 +16,22 @@ lazy_static! {
         // zkSync
         map.insert(324, ChainType::ZK);
 
-        /// testnet
-        // Ethereum
+        // Testnet ↓↓↓
+        // Goerli
         map.insert(5, ChainType::Normal);
-        // op
+        // op goerli
         map.insert(420, ChainType::OP);
-        // arb
+        // arb goerli
         map.insert(421613, ChainType::OP);
-        // zk
+        // zk goerli
         map.insert(280, ChainType::ZK);
-        map
 
+        map
     };
 }
 
 pub fn get_chain_type(chain_id: u64) -> ChainType {
-    ChainsType
+    CHAIN_TYPES
         .get(&chain_id)
         .unwrap_or(&ChainType::Normal)
         .clone()

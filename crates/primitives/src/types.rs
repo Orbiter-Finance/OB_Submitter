@@ -403,6 +403,7 @@ pub struct BlockStorage {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct WithdrawEvent {
+    pub block_number: u64,
     pub address: Address,
     pub chain_id: u64,
     pub token_address: Address,
@@ -411,6 +412,7 @@ pub struct WithdrawEvent {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct DepositEvent {
+    pub block_number: u64,
     pub address: Address,
     pub chain_id: u64,
     pub token_address: Address,
