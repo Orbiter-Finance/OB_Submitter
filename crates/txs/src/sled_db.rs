@@ -106,8 +106,6 @@ impl BlockTxsCountDB {
     }
 
     pub fn is_txs_completed(&self, start_block: u64, end_block: u64) -> Result<bool> {
-        // let span = tracing::span!(tracing::Level::INFO, "is_txs_completed");
-        // let _enter = span.enter();
         let mut is_completed = true;
         for i in start_block..end_block {
             let k = bincode::serialize(&i)?;

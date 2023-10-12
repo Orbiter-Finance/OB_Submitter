@@ -14,6 +14,7 @@ use ethers::{
     providers::Provider,
     types::{Address, Filter, TransactionReceipt, H160, H256, U256},
 };
+use primitives::env::{get_dealer_withdraw_delay, get_lock_duration, get_withdraw_duration};
 use primitives::{
     env::{get_fee_manager_contract_address, get_mainnet_chain_id, get_mainnet_rpc_urls},
     error::{Error as LocalError, Result},
@@ -22,6 +23,7 @@ use primitives::{
 };
 
 use ethers::types::U64;
+use std::time::SystemTime;
 use std::{option::Option, str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::{broadcast::Sender, RwLock};
 use tokio::time::timeout;
@@ -89,8 +91,6 @@ impl SubmitterContract {
 }
 
 pub async fn run(contract: Arc<SubmitterContract>) -> Result<()> {
-    // let span = span!(Level::INFO, "run");
-    // let _enter = span.enter();
     event!(Level::INFO, "latest block crawler is ready.",);
     let mut block_num = 0;
     loop {
@@ -144,8 +144,6 @@ impl ContractTrait for SubmitterContract {
         profit_root: [u8; 32],
         blocks_root: [u8; 32],
     ) -> Result<(H256, Option<U64>)> {
-        // let span = span!(Level::INFO, "submit_root");
-        // let _enter = span.enter();
         event!(
             Level::INFO,
             "submit root to contract: {:?}",
@@ -256,8 +254,6 @@ impl ContractTrait for SubmitterContract {
         tokens: Vec<H160>,
         block_number: u64,
     ) -> Result<Vec<Event>> {
-        // let span = span!(Level::INFO, "get_erc20_transfer_events_by_tokens_id");
-        // let _enter = span.enter();
         if tokens.is_empty() {
             return Ok(vec![]);
         }
@@ -518,5 +514,28 @@ impl ContractTrait for SubmitterContract {
             r,
         );
         Ok(r)
+    }
+
+    fn duration_lock_left(&self, last_submit_timestamp: u64) -> u64 {
+        let dealer_withdraw_delay = get_dealer_withdraw_delay();
+        let withdraw_duration = get_withdraw_duration();
+        let lock_duration = get_lock_duration();
+
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let challenge_end = last_submit_timestamp + dealer_withdraw_delay;
+        if now <= challenge_end {
+            return 0;
+        }
+
+        let m = (now - challenge_end) % (withdraw_duration + lock_duration);
+        if m <= withdraw_duration {
+            return 0;
+        }
+
+        return lock_duration - (m - withdraw_duration);
     }
 }

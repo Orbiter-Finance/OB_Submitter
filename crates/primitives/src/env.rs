@@ -26,6 +26,27 @@ pub fn get_start_block() -> u64 {
     std::env::var("START_BLOCK").unwrap().parse().unwrap()
 }
 
+pub fn get_dealer_withdraw_delay() -> u64 {
+    std::env::var("DEALER_WITHDRAW_DELAY")
+        .unwrap_or("".to_string())
+        .parse()
+        .unwrap_or(3600)
+}
+
+pub fn get_withdraw_duration() -> u64 {
+    std::env::var("WITHDRAW_DURATION")
+        .unwrap_or("".to_string())
+        .parse()
+        .unwrap_or(3360)
+}
+
+pub fn get_lock_duration() -> u64 {
+    std::env::var("LOCK_DURATION")
+        .unwrap_or("".to_string())
+        .parse()
+        .unwrap_or(240)
+}
+
 pub fn get_fee_manager_contract_address() -> Address {
     std::env::var("ORFeeManager_CONTRACT_ADDRESS")
         .unwrap()

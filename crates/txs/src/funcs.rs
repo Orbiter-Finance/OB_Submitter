@@ -55,8 +55,6 @@ impl TxsCrawler {
         end_timestamp: u64,
         delay_timestamp: u64,
     ) -> anyhow::Result<Vec<CrossTxRawData>> {
-        // let  span = tracing::span!(tracing::Level::INFO, "request_txs");
-        // let _enter = span.enter();
         let start_timestamp =
             start_timestamp
                 .checked_sub(delay_timestamp)
@@ -105,6 +103,8 @@ impl TxsCrawler {
                 // TODO: check source_time
                 event!(Level::INFO, "tx: {:?}", tx);
                 let mut tx = tx;
+
+                // TODO: What is the purpose of adding delay_timestamp here?
                 tx.target_time = tx.target_time + delay_timestamp * 1000;
                 new_txs.push(tx);
             }
@@ -213,8 +213,6 @@ impl SupportChains {
 }
 
 pub fn calculate_profit(percent: u64, tx: CrossTxData) -> CrossTxProfit {
-    // let span = tracing::span!(tracing::Level::INFO, "calculate_profit");
-    // let _enter = span.enter();
     let profit = tx.profit;
     let profit = profit * U256::from(percent) / U256::from(100_0000);
     event!(

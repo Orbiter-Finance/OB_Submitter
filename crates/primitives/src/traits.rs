@@ -100,4 +100,5 @@ pub trait Contract {
         token_chian_id: u64,
         token_id: Address,
     ) -> Result<u64>;
+    fn duration_lock_left(&self, last_submit_timestamp: u64) -> u64;
 }
