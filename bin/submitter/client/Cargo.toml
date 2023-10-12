@@ -31,12 +31,11 @@ tracing-subscriber = "0.3.17"
 serde_json = "1.0.105"
 hex = "0.4.3"
 tiny-keccak = "2.0.2"
-sparse-merkle-tree =  { git = "https://github.com/YanOctavian/sparse-merkle-tree.git"}
+sparse-merkle-tree = { git = "https://github.com/Orbiter-Finance/sparse-merkle-tree.git" }
 thiserror = "1.0.47"
 # local
 state = { path = "../../../crates/off-chain-state", package = "off-chain-state" }
-primitives = { path = "../../../crates/primitives"}
-contract = { path = "../../../crates/contract"}
-txs = {path = "../../../crates/txs"}
-utils = {path = "../../../crates/utils"}
-
+primitives = { path = "../../../crates/primitives" }
+contract = { path = "../../../crates/contract" }
+txs = { path = "../../../crates/txs" }
+utils = { path = "../../../crates/utils" }

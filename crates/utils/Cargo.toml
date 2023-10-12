@@ -11,6 +11,6 @@ rust-version.workspace = true
 
 [dependencies]
 hex = "0.4.3"
-sparse-merkle-tree = { git = "https://github.com/YanOctavian/sparse-merkle-tree.git" }
+sparse-merkle-tree = { git = "https://github.com/Orbiter-Finance/sparse-merkle-tree.git" }
 off-chain-state = { path = "../off-chain-state" }
 primitives = { path = "../primitives" }

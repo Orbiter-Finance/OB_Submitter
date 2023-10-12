@@ -27,6 +27,6 @@ debug = true
 [patch.crates-io]
 ethers = { git = "https://github.com/gakonst/ethers-rs.git" }
 ethers-providers = { git = "https://github.com/gakonst/ethers-rs.git" }
-sparse-merkle-tree = { git = "https://github.com/YanOctavian/sparse-merkle-tree.git" }
+sparse-merkle-tree = { git = "https://github.com/Orbiter-Finance/sparse-merkle-tree.git" }
 [patch."https://github.com/quake/smt-rocksdb-store.git"]
-smt-rocksdb-store = { git = "https://github.com/YanOctavian/smt-rocksdb-store.git", branch = "master" }
+smt-rocksdb-store = { git = "https://github.com/Orbiter-Finance/smt-rocksdb-store.git", branch = "master" }
