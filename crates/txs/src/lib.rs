@@ -676,6 +676,16 @@ async fn submit_root(
             continue;
         }
 
+        // Estimate whether the lock-in period may be exceeded
+        if contract.duration_lock_left(newest_block_info.storage.last_submit_timestamp) < 24 {
+            event!(
+                Level::WARN,
+                "Block #{:?}. - The lock-in period is about to expire or has expired",
+                newest_block_info.storage.block_number
+            );
+            continue;
+        }
+
         let profit_root = profit_state.read().unwrap().try_get_root()?;
         let block_txs_root = blocks_state.read().unwrap().try_get_root()?;
 
